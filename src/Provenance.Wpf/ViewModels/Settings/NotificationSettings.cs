@@ -41,6 +41,7 @@ public sealed partial class NotificationSettings : ObservableObject
     {
         _settings = settings;
         _gameSound = settings.Current.GameMessageSound;
+        _gameFriendLines = settings.Current.GameFriendLines;
         Rows =
         [
             new(settings, NoticeKind.FriendOnline, "A friend comes online", "A quiet notice. Not shown while you're in the game."),
@@ -55,10 +56,17 @@ public sealed partial class NotificationSettings : ObservableObject
     public IReadOnlyList<NoticeRow> Rows { get; }
 
     [ObservableProperty] private bool _gameSound;
+    [ObservableProperty] private bool _gameFriendLines;
 
     partial void OnGameSoundChanged(bool value)
     {
         _settings.SaveChange(s => s.GameMessageSound = value);
         HookFiles.SetGameSound(value);
+    }
+
+    partial void OnGameFriendLinesChanged(bool value)
+    {
+        _settings.SaveChange(s => s.GameFriendLines = value);
+        HookFiles.SetGameFriendLines(value);
     }
 }

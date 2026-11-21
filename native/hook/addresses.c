@@ -16,6 +16,14 @@
 #define SIG_FX_FROM_LINE "c6 44 24 0c 12 8b 46 08 c6 44 24 0d 00 50 68 ?? ?? ?? ?? 51 c6 44 24 1a 00 e8 ?? ?? ?? ?? 8b 0d ?? ?? ?? ?? " \
     "83 c4 0c 8d 54 24 0c 8d 44 24 14 6a 00 6a 01 6a 00 52 50 e8 ?? ?? ?? ??"
 #define SIG_FX_EXPAND "8b fe 83 c9 ff 33 c0 6a 00 f2 ae f7 d1 49 6a 01 51 8b 0d ?? ?? ?? ?? 56 8d 54 24 64 68 00 08 00 00 52 e8 ?? ?? ?? ??"
+/* the address sits past the end of what's matched, so the signature carries ?? up to and over it */
+#define ANY1 " ??"
+#define ANY4 ANY1 ANY1 ANY1 ANY1
+#define ANY16 ANY4 ANY4 ANY4 ANY4
+#define SIG_FX_MENU_FRONT "8b 48 0c 85 c9 74 ?? 8b 51 08 85 d2 74 ?? 3b 05" ANY4
+#define SIG_FX_LICENCE "89 5e 1c 89 5e 14 89 6e 18 89 ?? ?? ?? ?? ?? eb ?? 89 ?? ?? ?? ?? ?? 68" ANY16 ANY16 ANY16 ANY1 ANY1 ANY1
+#define SIG_FX_LOBBY "89 41 2c 8b 15 ?? ?? ?? ?? 89 7c 24 10 89 42 30 a1" ANY4
+#define SIG_FX_CHAR_INDEX "a1 ?? ?? ?? ?? 8d 0c 80 8d 14 48 a1 ?? ?? ?? ?? c1 e2 04 8d 4c 02 44"
 
 static struct hook_addr g_addr[ADDRESS_COUNT] = {
     /* starts on the push ebp, a detour past the frame setup leaves the stub's stack a dword off */
@@ -179,6 +187,19 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
         .usual = 0x630260, .sig_at = 0x127cef, .operand = 19, .sig = SIG_FX_EXPAND },
     [AT_FX_EXPANDER] = { .name = "auto-translate expander", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
         .usual = 0x1b7270, .sig_at = 0x127cef, .operand = 35, .rel = 1, .sig = SIG_FX_EXPAND },
+    /* the lobby's menus, only ever read */
+    [AT_FX_MENU_FRONT] = { .name = "menu in front", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
+        .usual = 0x5eedac, .sig_at = 0x15fdf2, .operand = 16, .sig = SIG_FX_MENU_FRONT },
+    [AT_FX_LICENCE_MENU] = { .name = "licence menu", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
+        .usual = 0x636520, .sig_at = 0x163b75, .operand = 11, .sig = SIG_FX_LICENCE },
+    [AT_FX_CONFIRM_MENU] = { .name = "confirm box", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
+        .usual = 0x636524, .sig_at = 0x163b75, .operand = 0x47, .sig = SIG_FX_LICENCE },
+    [AT_FX_LOBBY_MENU] = { .name = "lobby menu", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
+        .usual = 0x636570, .sig_at = 0x23dc0d, .operand = 5, .sig = SIG_FX_LOBBY },
+    [AT_FX_CHAR_LIST_MENU] = { .name = "character list menu", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
+        .usual = 0x6365a0, .sig_at = 0x23dc0d, .operand = 17, .sig = SIG_FX_LOBBY },
+    [AT_FX_CHAR_INDEX] = { .name = "selected character", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
+        .usual = 0x6365ac, .sig_at = 0x243e8d, .operand = 1, .sig = SIG_FX_CHAR_INDEX },
 };
 
 typedef struct {

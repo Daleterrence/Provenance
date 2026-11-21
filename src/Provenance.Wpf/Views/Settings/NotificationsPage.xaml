@@ -39,6 +39,10 @@
                                             Tag="Uses the game's own sound and settings.">
                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding GameSound}" AutomationProperties.Name="Message sound in the game" />
                     </HeaderedContentControl>
+                    <HeaderedContentControl Header="Friends online and offline"
+                                            Tag="Shown as a line in the chat log.">
+                        <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding GameFriendLines}" AutomationProperties.Name="Friend online and offline lines in the game" />
+                    </HeaderedContentControl>
                 </StackPanel>
             </Border>
         </StackPanel>

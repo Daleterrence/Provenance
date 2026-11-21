@@ -35,16 +35,21 @@ public static class HookFiles
     }
 
     // the hook plays the game's message sound for a message that arrives in the game unless this file's there
-    public static void SetGameSound(bool on)
+    public static void SetGameSound(bool on) => SetSwitchFile(HookContract.Files.Quiet, on, "the game's message sound");
+
+    // the hook prints the friend online and offline lines unless this file's there
+    public static void SetGameFriendLines(bool on) => SetSwitchFile(HookContract.Files.NoFriendLines, on, "the friend lines in the game");
+
+    private static void SetSwitchFile(string name, bool on, string what)
     {
         if (_dir is null) return;
         try
         {
-            var path = Path.Combine(RequiredDir, HookContract.Files.Quiet);
+            var path = Path.Combine(RequiredDir, name);
             if (on) File.Delete(path);
             else if (!File.Exists(path)) File.WriteAllBytes(path, []);
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not change the game's message sound"); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not change {What}", what); }
     }
 
     public static void Discard(int pid, string name)

@@ -4,9 +4,9 @@ enum {
     FX_MOVE_RETRY_MS = 2000, FX_MOVE_TRIES = 5, FX_SCAN_MS = 5000, FX_PRINTS = 3, FX_WORLD_MS = 5000,
 };
 enum { FX_FREE, FX_QUEUED, FX_PRINTED };
-enum { FX_IN, FX_NOTE, FX_BOUNCE, FX_MOVE };
+enum { FX_IN, FX_NOTE, FX_BOUNCE, FX_MOVE, FX_FRIEND };
 enum { FX_CMD_NONE, FX_CMD_M, FX_CMD_RM };
-enum { FX_SENDS = 4, FX_SEND_GAP_MS = 5000, FX_LINE_IN = 150, FX_PLAIN = 0x800, FX_SENT_IDS = 64, FX_COPIES = 4 };
+enum { FX_SENDS = 4, FX_SEND_GAP_MS = 5000, FX_LINE_IN = 150, FX_PLAIN = 0x800, FX_SENT_IDS = 64, FX_COPIES = 4, FX_FRIEND_LINES = 4, FX_FRIEND_RING = 8, FX_FRIEND_BURST = 4 };
 
 /* 0x1f and a chat mode gives the rest of the line that mode's colour. 0xdb's is blue, 0x7b's the red of the game's own refusals */
 static const char g_fx_blue[] = "\x1f\xdb", g_fx_red[] = "\x1f\x7b";
@@ -41,9 +41,10 @@ typedef struct {
 } fx_line;
 
 typedef struct { char name[100]; DWORD from_lo, from_hi, seq, time, first, gen; int slot, done; } fx_seen_rec;
+typedef struct { DWORD lo, hi; int slot, on, row, changed; } fx_presence;
 
 static struct {
-    volatile LONG found, first_poll, world, off, patched, watching, in_world, dirty, moved, nsent_ids, worker_dead;
+    volatile LONG found, first_poll, world, off, patched, watching, in_world, dirty, moved, nsent_ids, worker_dead, at_select;
     volatile DWORD netstat;
     BYTE *base;
     DWORD size, gen, old_time;
@@ -57,11 +58,13 @@ static struct {
     BYTE **unread_mgr;
     int commands;
     HANDLE change;
-    char dir[MAX_PATH + 64], quiet[MAX_PATH + 64];
+    char dir[MAX_PATH + 64], quiet[MAX_PATH + 64], no_friend_lines[MAX_PATH + 64];
     fx_line ring[FX_RING];
     int tail, head;
     fx_seen_rec seen[FX_SEEN];
     int nseen, seen_full;
+    fx_presence presence[IG_FRIENDS];
+    int npresence, presence_known;
     DWORD last_lo, last_hi;
     int last_slot;
     char last_name[FX_NAME];
@@ -158,7 +161,7 @@ static int fx_print_line(fx_line *l)
     lstrcpynA(text, l->text, sizeof text);
     if (l->kind == FX_BOUNCE) {
         if (!fx_print(g_fx_red, g_fx_not_sent, "", "")) return 0;
-    } else if (l->kind == FX_NOTE) {
+    } else if (l->kind == FX_NOTE || l->kind == FX_FRIEND) {
         if (!fx_print(g_fx_blue, text, "", "")) return 0;
     } else {
         g_fx_step = "word filter";
@@ -536,7 +539,9 @@ static void fx_print_queued(BYTE *b)
 {
     int n;
     for (n = 0; n < FX_PRINTS; n++) {
-        fx_line *l = &g_fx.ring[g_fx.head];
+        fx_line *l;
+        while (g_fx.head != g_fx.tail && g_fx.ring[g_fx.head].state == FX_FREE) g_fx.head = (g_fx.head + 1) % FX_RING;
+        l = &g_fx.ring[g_fx.head];
         if (l->state != FX_QUEUED || (l->kind != FX_MOVE && !fx_print_line(l))) return;
         if (l->move && !message_store_move_name(b, l->hdr, l->file, g_home, 1, l->now)) l->move = 0;
         l->printed_at = GetTickCount();
@@ -545,18 +550,53 @@ static void fx_print_queued(BYTE *b)
     }
 }
 
+/* [[menu global] + 4] + 0x46 is the name of the menu in front, 16 characters. Game thread only */
+static int fx_menu_name(char *out)
+{
+    const BYTE *menu, *inner;
+    if (!pc_addr_found(AT_FX_MENU_FRONT)) return 0;
+    if (!(menu = *(const BYTE **)pc_addr_of(g_fx.base, AT_FX_MENU_FRONT))) return 0;
+    if (!(inner = *(const BYTE **)(menu + 4))) return 0;
+    memcpy(out, inner + 0x46, 16);
+    out[16] = 0;
+    return 1;
+}
+static int fx_lobby_menu(void)
+{
+    /* not the confirm box, a yes/no like it could be up in the world */
+    static const char names[][17] = { "menu    ptc8lice", "menu    loby2win", "menu    dbnamese" };
+    char name[17];
+    int i;
+    if (!fx_menu_name(name)) return 0;
+    for (i = 0; i < (int)(sizeof names / sizeof names[0]); i++)
+        if (!memcmp(name, names[i], 16)) return 1;
+    return 0;
+}
+
 /* game thread */
 static void fx_game_tick(BYTE *b)
 {
     LONG was;
     DWORD seen;
+    int lobby;
     if (!g_fx.found) return;
     __try {
         if (!g_fx.off) {
             if (!g_fx.patched) fx_patch();
             was = g_fx.in_world;
+            lobby = fx_lobby_menu();
+            if (lobby && !g_fx.at_select) {
+                g_fx.at_select = 1;
+                g_fx.netstat = 0;
+                SetEvent(g_ig.wake);
+                base_log("ffxi: at the character select, messages wait for Provenance till the player's in the world\r\n");
+            }
             seen = g_fx.netstat;
-            g_fx.in_world = seen && (LONG)(GetTickCount() - seen) < FX_WORLD_MS && pc_game_tag(b) >= 0;
+            g_fx.in_world = !lobby && seen && (LONG)(GetTickCount() - seen) < FX_WORLD_MS && pc_game_tag(b) >= 0;
+            if (g_fx.in_world && g_fx.at_select) {
+                g_fx.at_select = 0;
+                base_log("ffxi: in the world, messages print in the chat log again\r\n");
+            }
             if (g_fx.in_world && !was) {
                 g_fx.dirty = 1;
                 SetEvent(g_ig.wake);
@@ -603,6 +643,8 @@ static void fx_look(void)
         base_log("ffxi: some extras aren't there (word filter %d, sound %d, auto-translate %d), the rest goes on without them\r\n",
                  pc_addr_found(AT_FX_WORD_FILTER), pc_addr_found(AT_FX_SOUND) && pc_addr_found(AT_FX_SOUND_ON),
                  pc_addr_found(AT_FX_EXPANDER) && pc_addr_found(AT_FX_AT_OBJECT));
+    if (!pc_addr_found(AT_FX_MENU_FRONT))
+        base_log("ffxi: no menu in front in this build, messages can't tell the character select from zoning\r\n");
     InterlockedExchange(&g_fx.found, 1);
     base_log("ffxi: every FFXiMain address the messages need is there\r\n");
 }
@@ -731,6 +773,65 @@ static int fx_queue(int kind, const char *name, const char *text, const BYTE *hd
     return 1;
 }
 
+/* the player's at the character select: what's waiting to print or be looked at stays unread, like at first entry */
+static void fx_drop_waiting(void)
+{
+    int i;
+    for (i = 0; i < FX_RING; i++)
+        if (g_fx.ring[i].state == FX_QUEUED && g_fx.ring[i].kind != FX_MOVE) InterlockedExchange(&g_fx.ring[i].state, FX_FREE);
+    for (i = 0; i < g_fx.nseen; i++) g_fx.seen[i].done = 1;
+}
+
+static int fx_friend_room(void)
+{
+    int i, used = 0, mine = 0;
+    for (i = 0; i < FX_RING; i++) {
+        used += g_fx.ring[i].state != FX_FREE;
+        mine += g_fx.ring[i].state == FX_QUEUED && g_fx.ring[i].kind == FX_FRIEND;
+    }
+    return used < FX_FRIEND_RING && mine < FX_FRIEND_LINES;
+}
+
+/* only a friend seen before gets a line, a row new to the list is just noted. A burst in one copy is the list reloading or
+   the connection dropping, not friends */
+static void fx_friend_lines(void)
+{
+    fx_presence now[IG_FRIENDS];
+    char name[FX_NAME], text[FX_NAME + 32];
+    int i, k, n = 0, changes = 0, show;
+    if (!g_friends_loaded || !g_ig.written.me) return;
+    for (i = 0; i < IG_FRIENDS; i++) {
+        const pol_friend *f = &g_ig.written.friends[i];
+        if (!pc_friend_valid(f) || (f->flags & FRIEND_PENDING)) continue;
+        now[n].lo = f->id_lo;
+        now[n].hi = f->id_hi;
+        now[n].slot = pc_friend_slot(f);
+        now[n].on = peers_friend_online(f->flags) != 0;
+        now[n].row = i;
+        now[n].changed = 0;
+        for (k = 0; g_fx.presence_known && k < g_fx.npresence; k++)
+            if (g_fx.presence[k].lo == now[n].lo && g_fx.presence[k].hi == now[n].hi && g_fx.presence[k].slot == now[n].slot) {
+                now[n].changed = g_fx.presence[k].on != now[n].on;
+                break;
+            }
+        changes += now[n].changed;
+        n++;
+    }
+    show = g_fx.presence_known && g_fx.watching && !g_fx.at_select && changes && changes < FX_FRIEND_BURST &&
+           (!g_fx.no_friend_lines[0] || GetFileAttributesA(g_fx.no_friend_lines) == INVALID_FILE_ATTRIBUTES);
+    for (i = 0; show && i < n; i++) {
+        if (!now[i].changed || !fx_friend_room()) continue;
+        fx_clean((const BYTE *)g_ig.written.friends[now[i].row].name, 16, name, sizeof name);
+        if (!name[0]) continue;
+        lstrcpynA(text, name, sizeof text);
+        fx_append(text, sizeof text, now[i].on ? " has come online." : " has gone offline.");
+        fx_queue(FX_FRIEND, name, text, NULL, NULL, 0);
+    }
+    memcpy(g_fx.presence, now, n * sizeof now[0]);
+    g_fx.npresence = n;
+    g_fx.presence_known = 1;
+}
+
 /* 1 when it's dealt with, 0 to look again on the next scan, 2 when the ring's full */
 static int fx_take(const char *name, const BYTE *hdr)
 {
@@ -800,17 +901,18 @@ static void fx_scan(BYTE *b, int seeding)
                 if (!g_fx.old_said) base_log("ffxi: a message dated before ones the full set let go of is left unread\r\n");
                 g_fx.old_said = 1;
                 continue;
-            /* already there before the player first got in the world, so it stays unread like it always has */
-            } else if (seeding) {
+            /* already there before the player first got in the world, or it came at the character select: it stays unread */
+            } else if (seeding || g_fx.at_select) {
                 if (fx_seen_add(fd.cFileName, hdr, 1) >= 0) n++;
                 continue;
             } else if ((k = fx_seen_add(fd.cFileName, hdr, 0)) < 0) {
                 continue;
             }
         }
-        /* zoning, a cutscene or the character select: it waits and prints once they're back */
+        /* zoning or a cutscene: it waits and prints once they're back. At the character select it's let go */
         if (!g_fx.in_world) {
-            g_fx.seen[k].first = GetTickCount();
+            if (g_fx.at_select) g_fx.seen[k].done = 1;
+            else g_fx.seen[k].first = GetTickCount();
             continue;
         }
         if (!have) {
@@ -832,9 +934,19 @@ static void fx_scan(BYTE *b, int seeding)
     if (seeding) base_log("ffxi: in the world, %d message(s) already in r\\b stay unread, new ones go to the chat log\r\n", n);
 }
 
+static void fx_switch_file(char *out, const char *name)
+{
+    int n = (int)GetEnvironmentVariableA(ENV_IPC_DIR, out, MAX_PATH);
+    if (n > 0 && n < MAX_PATH - 32) {
+        if (out[n - 1] != '\\') lstrcatA(out, "\\");
+        lstrcatA(out, name);
+    } else {
+        out[0] = 0;
+    }
+}
+
 static void fx_watch_start(BYTE *b)
 {
-    int n;
     if (g_home < 0 || !g_viewer[0] || !pc_has(b, SV_MAIL_DECODE_HEADER) || !pc_has(b, SV_MAIL_PATH_UNREAD) ||
         !pc_has(b, SV_MAIL_PATH_READ)) {
         g_fx.off = 1;
@@ -847,13 +959,8 @@ static void fx_watch_start(BYTE *b)
         base_log("ffxi: r\\b isn't a plain folder, messages stay as the game has them\r\n");
         return;
     }
-    n = (int)GetEnvironmentVariableA(ENV_IPC_DIR, g_fx.quiet, MAX_PATH);
-    if (n > 0 && n < MAX_PATH - 32) {
-        if (g_fx.quiet[n - 1] != '\\') lstrcatA(g_fx.quiet, "\\");
-        lstrcatA(g_fx.quiet, IPC_QUIET);
-    } else {
-        g_fx.quiet[0] = 0;
-    }
+    fx_switch_file(g_fx.quiet, IPC_QUIET);
+    fx_switch_file(g_fx.no_friend_lines, IPC_NO_FRIEND_LINES);
     fx_scan(b, 1);
     g_fx.change = FindFirstChangeNotificationA(g_fx.dir, FALSE, FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_SIZE |
                                                                FILE_NOTIFY_CHANGE_LAST_WRITE);
@@ -990,10 +1097,12 @@ static void fx_worker(BYTE *b)
         fx_moves(b);
         fx_sent_copies(b, 1);
         if (g_fx.off) return;
+        fx_friend_lines();
         if (!g_fx.watching) {
             if (g_fx.in_world && g_fx.patched) fx_watch_start(b);
             return;
         }
+        if (g_fx.at_select) fx_drop_waiting();
         if (g_fx.dirty || now >= g_fx.next_scan) {
             g_fx.dirty = 0;
             g_fx.next_scan = now + FX_SCAN_MS;
