@@ -209,13 +209,11 @@ static int lb_error(ULONGLONG now)
 {
     BYTE *m = lb_menu(AT_FX_OK_MENU);
     if (!m) return 0;
-    if (!g_lb.error_at) {
-        if (g_lb.retries >= LB_RETRIES || !lb_says_3101(m)) {
-            lb_finish("the game gave an error");
-            return 1;
-        }
-        g_lb.error_at = now;
+    if (g_lb.retries >= LB_RETRIES || !lb_says_3101(m)) {
+        lb_finish("the game gave an error");
+        return 1;
     }
+    if (!g_lb.error_at) g_lb.error_at = now;
     if (now - g_lb.error_at < LB_ERROR_MS) return 0;
     *(int *)(m + 0x25c) = 1;
     g_lb.retries++;
@@ -311,6 +309,7 @@ static void lb_step(void)
     if (kind == g_lb.answered && kind != LB_NONE) return;
     g_lb.answered = LB_NONE;
     if (kind != LB_LIST) g_lb.list_at = 0;
+    if (kind != LB_OK) g_lb.error_at = 0;
     if (kind != LB_NONE && lb_answer(kind, now)) g_lb.answered = kind;
 }
 
