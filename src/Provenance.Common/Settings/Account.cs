@@ -31,6 +31,8 @@ public sealed class Account
     public string? AutoLoginCharacter { get; set; }
 
     public string? AutoLoginWorld { get; set; }
+
+    public int? AutoLoginSlot { get; set; }
 }
 
 public sealed record AccountCharacter(string Name, string? World);

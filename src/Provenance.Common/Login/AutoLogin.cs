@@ -11,6 +11,10 @@ public static class AutoLogin
 
     public static bool IsName(string? name) => name is { Length: >= 1 and <= 15 } && name.All(char.IsAsciiLetter);
 
+    public const int Slots = 16;
+
+    public static bool IsSlot(int? slot) => slot is >= 1 and <= Slots;
+
     public static bool IsWorld(string? world) => world is { Length: >= 1 and <= 15 } && world.All(char.IsAsciiLetterOrDigit);
 
     public static SessionOptions Apply(SessionOptions options, Account? account, LauncherSettings settings)
@@ -21,6 +25,7 @@ public static class AutoLogin
             AcceptLicence = settings.AcceptLicenceAgreement,
             Character = picks ? account!.AutoLoginCharacter : null,
             CharacterWorld = picks && IsWorld(account!.AutoLoginWorld) ? account.AutoLoginWorld : null,
+            CharacterSlot = !picks && IsSlot(account?.AutoLoginSlot) ? account!.AutoLoginSlot : null,
         };
     }
 
@@ -40,6 +45,9 @@ public static class AutoLogin
             var named = account.AutoLoginWorld is null ? found.Where(c => string.Equals(c.Name, chosen, StringComparison.OrdinalIgnoreCase)).ToList() : [];
             (account.AutoLoginCharacter, account.AutoLoginWorld) = named.Count == 1 ? (named[0].Name, named[0].World) : (null, null);
         }
+        // the game's list isn't in the account's order, so only the first slot of a lone character is known for sure
+        if (account.AutoLoginCharacter is null && account.AutoLoginSlot == 1 && found.Count == 1)
+            (account.AutoLoginCharacter, account.AutoLoginWorld, account.AutoLoginSlot) = (found[0].Name, found[0].World, null);
         return true;
     }
 

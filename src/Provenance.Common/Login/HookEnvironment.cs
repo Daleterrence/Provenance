@@ -60,6 +60,8 @@ internal static class HookEnvironment
             env[HookContract.Env.Character] = options.Character;
             if (AutoLogin.IsWorld(options.CharacterWorld)) env[HookContract.Env.CharacterWorld] = options.CharacterWorld;
         }
+        else if (AutoLogin.IsSlot(options.CharacterSlot))
+            env[HookContract.Env.CharacterSlot] = options.CharacterSlot!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
     // every key's in it, empty when it isn't asked for, so the hook drops what the login said
@@ -67,7 +69,7 @@ internal static class HookEnvironment
     {
         var env = new Dictionary<string, string?>();
         SetAutoLogin(env, options);
-        return string.Join("\n", new[] { HookContract.Env.AcceptLicence, HookContract.Env.Character, HookContract.Env.CharacterWorld }
+        return string.Join("\n", new[] { HookContract.Env.AcceptLicence, HookContract.Env.Character, HookContract.Env.CharacterWorld, HookContract.Env.CharacterSlot }
             .Select(k => $"{k}={env.GetValueOrDefault(k)}"));
     }
 

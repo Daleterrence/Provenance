@@ -25,12 +25,12 @@
                             <Grid ColumnDefinitions="*,Auto">
                                 <StackPanel Margin="0,0,10,0" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding Name}" FontSize="14" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="Its characters appear here after it has logged in once." FontSize="11" TextWrapping="Wrap"
+                                    <TextBlock Text="Its characters appear here after it has logged in once. Until then you can pick by slot on the game's character list." FontSize="11" TextWrapping="Wrap"
                                                Style="{StaticResource Help}"
                                                Visibility="{Binding HasCharacters, Converter={StaticResource InvertBoolToVis}}" />
                                 </StackPanel>
                                 <ComboBox Grid.Column="1" Width="220" Margin="0" Padding="10,6" ItemsSource="{Binding Choices}"
-                                          SelectedIndex="{Binding Index}" IsEnabled="{Binding HasCharacters}"
+                                          SelectedIndex="{Binding Index}"
                                           AutomationProperties.Name="{Binding DropdownName}" />
                             </Grid>
                         </Border>

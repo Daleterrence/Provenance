@@ -4,7 +4,7 @@ enum { LB_NONE, LB_LICENCE, LB_LOBBY, LB_LIST, LB_CONFIRM, LB_OK };
 enum { LB_PICKING, LB_AWAIT_CONFIRM, LB_AWAIT_WORLD, LB_FINISHED };
 
 static struct {
-    int licence, picking, stage, answered, tried, picks, retries;
+    int licence, picking, slot, stage, answered, tried, picks, retries;
     int licence_off, picking_off;
     char name[LB_NAME], world[LB_NAME];
     ULONGLONG started_at, next_look, picked_at, list_at, confirmed_at, error_at;
@@ -25,7 +25,7 @@ static int lb_name_ok(const char *s)
 /* written as Play's pressed, so a character picked after the login still counts. An empty value switches one off */
 static void lb_play_file(void)
 {
-    static const char *allowed[] = { ENV_ACCEPT_LICENCE, ENV_CHARACTER, ENV_CHARACTER_WORLD };
+    static const char *allowed[] = { ENV_ACCEPT_LICENCE, ENV_CHARACTER, ENV_CHARACTER_WORLD, ENV_CHARACTER_SLOT };
     char path[MAX_PATH + 64], buf[512], *p, *line, *eq;
     DWORD got = 0;
     HANDLE f;
@@ -41,9 +41,17 @@ static void lb_play_file(void)
         line = requests_line(&p);
         if (!(eq = strchr(line, '='))) continue;
         *eq = 0;
-        for (k = 0; k < 3; k++)
+        for (k = 0; k < 4; k++)
             if (!lstrcmpA(line, allowed[k])) SetEnvironmentVariableA(line, eq[1] ? eq + 1 : NULL);
     }
+}
+
+/* a slot is a place on the lobby's list, counted from 1. The list has no gaps */
+static int lb_slot(const char *s)
+{
+    int n = 0;
+    for (; *s >= '0' && *s <= '9' && n <= LB_ENTRIES; s++) n = n * 10 + (*s - '0');
+    return !*s && n >= 1 && n <= LB_ENTRIES ? n : 0;
 }
 
 /* at Play: what's asked for. 1 when the callback has to be there for it */
@@ -62,6 +70,9 @@ static int lb_ready(BYTE *b)
         lstrcpyA(g_lb.name, name);
         g_lb.picking = 1;
         if (!GetEnvironmentVariableA(ENV_CHARACTER_WORLD, g_lb.world, sizeof g_lb.world)) g_lb.world[0] = 0;
+    } else if ((n = GetEnvironmentVariableA(ENV_CHARACTER_SLOT, v, sizeof v)) > 0 && n < sizeof v) {
+        g_lb.slot = lb_slot(v);
+        g_lb.picking = g_lb.slot != 0;
     }
     if (!g_lb.licence && !g_lb.picking) return 0;
     if (!pc_addr_found(AT_POLL_CALLBACK)) {
@@ -156,7 +167,7 @@ static int lb_pick(ULONGLONG now)
     for (k = 0; k < LB_ENTRIES; k++) {
         const BYTE *e = m + 0x34 + LB_STRIDE * k;
         used += *(const int *)(e + 0x34) == 1;
-        if (!lb_same_name((const char *)e + 0x10, g_lb.name)) continue;
+        if (g_lb.slot ? k != g_lb.slot - 1 || *(const int *)(e + 0x34) != 1 : !lb_same_name((const char *)e + 0x10, g_lb.name)) continue;
         named++;
         only = k;
         if (g_lb.world[0] && !lb_same_world((const char *)e + 0x20, g_lb.world)) continue;

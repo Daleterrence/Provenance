@@ -43,6 +43,7 @@ public static class HookContract
         public const string AcceptLicence = "POL_ACCEPT_LICENCE";
         public const string Character = "POL_CHARACTER";
         public const string CharacterWorld = "POL_CHARACTER_WORLD";
+        public const string CharacterSlot = "POL_CHARACTER_SLOT";
         public const string LaunchId = "PROVENANCE_LAUNCH_ID";
         public const string Launch = "PROVENANCE_LAUNCH";
 
@@ -51,7 +52,7 @@ public static class HookContract
         public const string ProvenancePrefix = "PROVENANCE_";
 
         public static readonly string[] GoFile =
-            [CredPol, CredSea, CredOneshot, CredOtp, CredHandle, CredPlay, CredChat, Status, Home, Handle, Lean, AcceptLicence, Character, CharacterWorld];
+            [CredPol, CredSea, CredOneshot, CredOtp, CredHandle, CredPlay, CredChat, Status, Home, Handle, Lean, AcceptLicence, Character, CharacterWorld, CharacterSlot];
     }
 
     // a request file is pol_hook.<pid>.<name>, the hook renames it to .taking while it reads it

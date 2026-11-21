@@ -310,7 +310,7 @@ static void login_prestart_wait(void)
 {
     static const char *allowed[] = { ENV_CRED_POL, ENV_CRED_SEA, ENV_CRED_ONESHOT, ENV_CRED_OTP,
                                      ENV_CRED_HANDLE, ENV_CRED_PLAY, ENV_CRED_CHAT, ENV_STATUS, ENV_HOME,
-                                     ENV_HANDLE, ENV_LEAN, ENV_ACCEPT_LICENCE, ENV_CHARACTER, ENV_CHARACTER_WORLD };
+                                     ENV_HANDLE, ENV_LEAN, ENV_ACCEPT_LICENCE, ENV_CHARACTER, ENV_CHARACTER_WORLD, ENV_CHARACTER_SLOT };
     char gp[MAX_PATH + 64];
     HANDLE watch;
     if (!base_getenv_set(ENV_PRESTART)) return;
