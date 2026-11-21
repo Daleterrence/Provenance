@@ -63,6 +63,8 @@ enum hook_address {
     AT_FX_LOBBY_MENU,
     AT_FX_CHAR_LIST_MENU,
     AT_FX_CHAR_INDEX,
+    AT_FX_FRIEND_DECLINE,
+    AT_FX_FRIEND_ACCEPT,
     ADDRESS_COUNT
 };
 
@@ -476,6 +478,8 @@ PC_SVC1(int, pc_set_jp_table, SV_SET_JP_TABLE, int, on)
 PC_SVC1(int, pc_set_language, SV_SET_LANGUAGE, int, lang)
 #define SV_SET_JP_LANGUAGE         0x17e0
 PC_SVC1(int, pc_set_jp_language, SV_SET_JP_LANGUAGE, int, lang)
+#define SV_GET_MESSAGE_TITLE 0x10bc
+PC_SVC3_V(void, pc_get_message_title, SV_GET_MESSAGE_TITLE, int, kind, char *, out, int, cap)
 #define SV_SET_MESSAGE_TITLE 0x10c0
 PC_SVC2(int, pc_set_message_title, SV_SET_MESSAGE_TITLE, int, i, const char *, text)
 #define SV_SET_MESSAGE_TEXT 0x1458

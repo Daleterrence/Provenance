@@ -7,12 +7,17 @@ enum { FX_FREE, FX_QUEUED, FX_PRINTED };
 enum { FX_IN, FX_NOTE, FX_BOUNCE, FX_MOVE, FX_FRIEND };
 enum { FX_CMD_NONE, FX_CMD_M, FX_CMD_RM };
 enum { FX_SENDS = 4, FX_SEND_GAP_MS = 5000, FX_LINE_IN = 150, FX_PLAIN = 0x800, FX_SENT_IDS = 64, FX_COPIES = 4, FX_FRIEND_LINES = 4, FX_FRIEND_RING = 8, FX_FRIEND_BURST = 4 };
+enum { FX_CMD_FR = FX_CMD_RM + 1, FX_WAITING = 16, FX_ANSWER_MS = 30000 };
+enum { FX_ANS_NONE, FX_ANS_WANTED, FX_ANS_RUNNING };
+enum { FX_REQ_NO, FX_REQ_NEW, FX_REQ_DONE, FX_REQ_KEPT };
 
 /* 0x1f and a chat mode gives the rest of the line that mode's colour. 0xdb's is blue, 0x7b's the red of the game's own refusals */
 static const char g_fx_blue[] = "\x1f\xdb", g_fx_red[] = "\x1f\x7b";
 static const char g_fx_not_sent[] = "This message was not sent. Please try again.";
 static const char g_fx_no_friend[] = " wasn't found on your friend list, check the spelling and try again.";
 static const char g_fx_no_reply[] = "Nobody has sent you a message yet to reply to.";
+static const char g_fx_no_request[] = "No friend request for that name was found.";
+static const char g_fx_not_answered[] = "Your answer was not sent. Please try again.";
 
 typedef unsigned (__cdecl *fx_count_fn)(void);
 typedef int (__cdecl *fx_mark_fn)(void *);
@@ -24,6 +29,9 @@ typedef void (__cdecl *fx_sound_fn)(void);
 typedef BYTE (__fastcall *fx_add_line_fn)(void *log, void *unused, const char *text, const BYTE *mode, int indent, int expand,
                                           int which);
 typedef int (__fastcall *fx_expand_fn)(void *at, void *unused, char *dst, int cap, const char *src, int len, int a, int b);
+typedef int (__cdecl *fx_decline_fn)(DWORD seq, DWORD time, DWORD lo, DWORD hi, const char *title, const char *typed, void *cb, int tag);
+typedef int (__cdecl *fx_accept_fn)(DWORD seq, DWORD time, DWORD lo, DWORD hi, const char *typed, const char *title, const char *title_1,
+                                    void *cb, int tag);
 
 typedef struct { DWORD lo, hi; int slot; char name[FX_NAME], text[FX_TEXT]; } fx_send;
 typedef struct { DWORD time, seq; BYTE from_slot; } fx_sent_id;
@@ -40,7 +48,8 @@ typedef struct {
     char file[100], now[100];
 } fx_line;
 
-typedef struct { char name[100]; DWORD from_lo, from_hi, seq, time, first, gen; int slot, done; } fx_seen_rec;
+typedef struct { DWORD seq, time, lo, hi; int slot, used; char name[FX_NAME]; } fx_request;
+typedef struct { char name[100]; DWORD from_lo, from_hi, seq, time, first, gen; int slot, done, req; } fx_seen_rec;
 typedef struct { DWORD lo, hi; int slot, on, row, changed; } fx_presence;
 
 static struct {
@@ -74,6 +83,10 @@ static struct {
     ULONGLONG sent_at, started;
     fx_sent_id sent_ids[FX_SENT_IDS];
     void *volatile copies[FX_COPIES];
+    fx_request waiting[FX_WAITING], want;
+    volatile LONG waiting_lock, ans_state, ans_done, ans_code;
+    int want_yes;
+    ULONGLONG ans_at;
 } g_fx;
 
 static int fx_missing(void)
@@ -82,6 +95,11 @@ static int fx_missing(void)
     for (i = 0; i < (int)(sizeof g_fx_core / sizeof g_fx_core[0]); i++)
         if (!pc_addr_found(g_fx_core[i])) n++;
     return n;
+}
+
+static int fx_answers(void)
+{
+    return g_fx.commands && pc_addr_found(AT_FX_FRIEND_DECLINE) && pc_addr_found(AT_FX_FRIEND_ACCEPT);
 }
 
 static int fx_lead(BYTE c) { return (c >= 0x81 && c <= 0x9f) || (c >= 0xe0 && c <= 0xfc); }
@@ -253,8 +271,9 @@ static int fx_parse(char *line, char **who, char **text)
     while (*p == ' ') p++;
     if (!lstrcmpiA(cmd, "/m")) kind = FX_CMD_M;
     else if (!lstrcmpiA(cmd, "/rm")) kind = FX_CMD_RM;
+    else if (!lstrcmpiA(cmd, "/fr")) kind = FX_CMD_FR;
     else return FX_CMD_NONE;
-    if (kind == FX_CMD_M) {
+    if (kind == FX_CMD_M || kind == FX_CMD_FR) {
         *who = p;
         while (*p && *p != ' ') p++;
         if (*p) *p++ = 0;
@@ -315,6 +334,190 @@ static int fx_friend(BYTE *b, const char *typed, fx_send *s)
     return 0;
 }
 
+static int fx_req_lock(void)
+{
+    int i;
+    for (i = 0; i < 200; i++) {
+        if (!InterlockedCompareExchange(&g_fx.waiting_lock, 1, 0)) return 1;
+        SwitchToThread();
+    }
+    return 0;
+}
+static void fx_req_unlock(void) { InterlockedExchange(&g_fx.waiting_lock, 0); }
+static int fx_req_same(const fx_request *a, const fx_request *b)
+{
+    return a->lo == b->lo && a->hi == b->hi && a->slot == b->slot && a->seq == b->seq && a->time == b->time;
+}
+static int fx_req_older(const fx_request *a, const fx_request *b)
+{
+    return a->time < b->time || (a->time == b->time && a->seq < b->seq);
+}
+
+/* the worker adds and the game's thread finds and drops, a full table gives its oldest up for a new one */
+static int fx_req_add(const fx_request *r)
+{
+    int i, k = -1;
+    if (!fx_req_lock()) return 0;
+    for (i = 0; i < FX_WAITING; i++)
+        if (g_fx.waiting[i].used && fx_req_same(&g_fx.waiting[i], r)) {
+            fx_req_unlock();
+            return 1;
+        }
+    for (i = 0; i < FX_WAITING; i++) {
+        if (!g_fx.waiting[i].used) {
+            k = i;
+            break;
+        }
+        if (k < 0 || fx_req_older(&g_fx.waiting[i], &g_fx.waiting[k])) k = i;
+    }
+    g_fx.waiting[k] = *r;
+    g_fx.waiting[k].used = 1;
+    fx_req_unlock();
+    return 1;
+}
+
+static int fx_req_find(const char *typed, fx_request *out)
+{
+    int i, k = -1;
+    if (!fx_req_lock()) return 0;
+    for (i = 0; i < FX_WAITING; i++)
+        if (g_fx.waiting[i].used && fx_same_name(typed, g_fx.waiting[i].name, FX_NAME) &&
+            (k < 0 || fx_req_older(&g_fx.waiting[k], &g_fx.waiting[i])))
+            k = i;
+    if (k >= 0) *out = g_fx.waiting[k];
+    fx_req_unlock();
+    return k >= 0;
+}
+static void fx_req_drop(const fx_request *r)
+{
+    int i;
+    if (!fx_req_lock()) return;
+    for (i = 0; i < FX_WAITING; i++)
+        if (g_fx.waiting[i].used && fx_req_same(&g_fx.waiting[i], r)) g_fx.waiting[i].used = 0;
+    fx_req_unlock();
+}
+
+static int fx_seen_has(const fx_request *r)
+{
+    int i;
+    for (i = 0; i < g_fx.nseen; i++) {
+        const fx_seen_rec *s = &g_fx.seen[i];
+        if (s->from_lo == r->lo && s->from_hi == r->hi && s->slot == r->slot && s->seq == r->seq && s->time == r->time) return 1;
+    }
+    return 0;
+}
+/* run after the seen set's pruned, a request whose file has left r\b is forgotten */
+static void fx_req_sync(void)
+{
+    int i;
+    if (!fx_req_lock()) return;
+    for (i = 0; i < FX_WAITING; i++)
+        if (g_fx.waiting[i].used && !fx_seen_has(&g_fx.waiting[i])) g_fx.waiting[i].used = 0;
+    fx_req_unlock();
+}
+
+static BYTE __cdecl fx_answer_callback(int tag, int unused, int code, int extra)
+{
+    (void)tag; (void)unused; (void)extra;
+    if (g_fx.ans_state == FX_ANS_RUNNING && !g_fx.ans_done) {
+        g_fx.ans_code = code;
+        g_fx.ans_done = 1;
+    }
+    return 1;
+}
+
+static void fx_answer_say(const char *colour, const char *text)
+{
+    if (!g_fx.at_select) fx_print(colour, text, "", "");
+}
+static void fx_answer_end(void)
+{
+    g_fx.ans_state = FX_ANS_NONE;
+    g_fx.ans_done = 0;
+}
+
+static void fx_answer_command(const char *who, const char *word)
+{
+    fx_request r;
+    int yes;
+    if (!lstrcmpiA(word, "yes")) yes = 1;
+    else if (!lstrcmpiA(word, "no")) yes = 0;
+    else return;
+    if (!fx_req_find(who, &r)) {
+        fx_print(g_fx_red, g_fx_no_request, "", "");
+        return;
+    }
+    if (g_fx.ans_state != FX_ANS_NONE) {
+        fx_print(g_fx_red, g_fx_not_answered, "", "");
+        base_log("ffxi: a friend request answer didn't go, another is still waiting for its reply\r\n");
+        return;
+    }
+    g_fx.want = r;
+    g_fx.want_yes = yes;
+    g_fx.ans_state = FX_ANS_WANTED;
+}
+
+static void fx_answer_start(BYTE *b)
+{
+    static char title[0x80], title_1[0x80], typed[16];
+    const fx_request *w = &g_fx.want;
+    int r;
+    memset(title, 0, sizeof title);
+    memset(title_1, 0, sizeof title_1);
+    memset(typed, 0, sizeof typed);
+    g_fx.ans_done = 0;
+    g_fx.ans_at = GetTickCount64();
+    g_fx.ans_state = FX_ANS_RUNNING;
+    if (!pc_has(b, SV_GET_MESSAGE_TITLE)) {
+        r = -1;
+    } else if (g_fx.want_yes) {
+        pc_get_message_title(b, 9, title, 0x7f);
+        pc_get_message_title(b, 1, title_1, 0x7f);
+        r = ((fx_accept_fn)pc_addr_of(g_fx.base, AT_FX_FRIEND_ACCEPT))(w->seq, w->time, w->lo, w->hi, typed, title, title_1,
+                                                                        (void *)fx_answer_callback, 0x15);
+    } else {
+        pc_get_message_title(b, 10, title, 0x7f);
+        r = ((fx_decline_fn)pc_addr_of(g_fx.base, AT_FX_FRIEND_DECLINE))(w->seq, w->time, w->lo, w->hi, title, typed,
+                                                                          (void *)fx_answer_callback, 0x16);
+    }
+    if (!r) return;
+    fx_answer_end();
+    base_log("ffxi: a friend request answer didn't start (%d)\r\n", r);
+    fx_answer_say(g_fx_red, g_fx_not_answered);
+}
+
+/* the callback only leaves its code, the lines are printed from here */
+static void fx_answer_pump(BYTE *b)
+{
+    int code;
+    if (g_fx.ans_state == FX_ANS_WANTED) {
+        if (g_fx.off) {
+            fx_answer_end();
+            base_log("ffxi: a friend request answer didn't start, the hook's switched off\r\n");
+            fx_answer_say(g_fx_red, g_fx_not_answered);
+            return;
+        }
+        fx_answer_start(b);
+    }
+    if (g_fx.ans_state != FX_ANS_RUNNING) return;
+    if (g_fx.ans_done) {
+        code = (int)g_fx.ans_code;
+        fx_answer_end();
+        if (!code) {
+            fx_req_drop(&g_fx.want);
+            base_log("ffxi: a friend request was %s\r\n", g_fx.want_yes ? "accepted" : "declined");
+            fx_answer_say(g_fx_blue, g_fx.want_yes ? "You accepted the friend request." : "You declined the friend request.");
+        } else {
+            base_log("ffxi: a friend request answer failed (%d)\r\n", code);
+            fx_answer_say(g_fx_red, g_fx_not_answered);
+        }
+    } else if (GetTickCount64() - g_fx.ans_at >= FX_ANSWER_MS) {
+        fx_answer_end();
+        base_log("ffxi: a friend request answer got no reply in 30s\r\n");
+        fx_answer_say(g_fx_red, g_fx_not_answered);
+    }
+}
+
 static void fx_command(BYTE *b)
 {
     static char line[FX_LINE_IN + 1], plain[FX_PLAIN];
@@ -323,6 +526,10 @@ static void fx_command(BYTE *b)
     int kind;
     lstrcpynA(line, (const char *)pc_addr_of(g_fx.base, AT_FX_EXPANDED), sizeof line);
     if ((kind = fx_parse(line, &who, &raw)) == FX_CMD_NONE) return;
+    if (kind == FX_CMD_FR) {
+        if (fx_answers()) fx_answer_command(who, raw);
+        return;
+    }
     if (g_fx.nsends >= FX_SENDS) {
         fx_print(g_fx_red, g_fx_not_sent, "", "");
         base_log("ffxi: a %s didn't go, four are already waiting\r\n", kind == FX_CMD_M ? "/m" : "/rm");
@@ -363,7 +570,7 @@ static const BYTE *__cdecl fx_lookup(const BYTE *table, const char *token)
     const BYTE *r = g_fx.lookup(table, token);
     if (r || g_fx.off || !g_fx.watching || !token) return r;
     __try {
-        if (!lstrcmpiA(token, "/m") || !lstrcmpiA(token, "/rm")) fx_command(g_ig.b);
+        if (!lstrcmpiA(token, "/m") || !lstrcmpiA(token, "/rm") || (fx_answers() && !lstrcmpiA(token, "/fr"))) fx_command(g_ig.b);
     } __except (fx_caught(GetExceptionInformation())) {
         fx_fault("in a chat command", g_fx_step);
         g_fx_step = "";
@@ -474,10 +681,15 @@ static void fx_poll(BYTE *b)
     __try {
         if (g_fx.off) {
             fx_send_wind_down(b);
+            g_fx_step = "friend answer";
+            fx_answer_pump(b);
+            g_fx_step = "";
             return;
         }
         g_fx_step = "send";
         fx_send_pump(b);
+        g_fx_step = "friend answer";
+        fx_answer_pump(b);
         g_fx_step = "";
     } __except (fx_caught(GetExceptionInformation())) {
         /* one already going is left for the wind-down to poll, unless the wind-down's what faulted. A dropped buffer stays,
@@ -524,7 +736,7 @@ static void fx_patch(void)
 static void fx_unpatch(void)
 {
     if (!g_fx.patched) return;
-    if (g_fx.commands && g_fx.job < 0 && !g_fx.msg && !g_fx.nsends && !g_fx.unsent) {
+    if (g_fx.commands && g_fx.job < 0 && !g_fx.msg && !g_fx.nsends && !g_fx.unsent && g_fx.ans_state == FX_ANS_NONE) {
         fx_restore(AT_FX_LOOKUP_CALL, (void *)fx_lookup, g_fx.lookup_was);
         g_fx.commands = 0;
     }
@@ -643,6 +855,8 @@ static void fx_look(void)
         base_log("ffxi: some extras aren't there (word filter %d, sound %d, auto-translate %d), the rest goes on without them\r\n",
                  pc_addr_found(AT_FX_WORD_FILTER), pc_addr_found(AT_FX_SOUND) && pc_addr_found(AT_FX_SOUND_ON),
                  pc_addr_found(AT_FX_EXPANDER) && pc_addr_found(AT_FX_AT_OBJECT));
+    if (!pc_addr_found(AT_FX_FRIEND_DECLINE) || !pc_addr_found(AT_FX_FRIEND_ACCEPT))
+        base_log("ffxi: no friend request answer in this build, no /fr this time\r\n");
     if (!pc_addr_found(AT_FX_MENU_FRONT))
         base_log("ffxi: no menu in front in this build, messages can't tell the character select from zoning\r\n");
     InterlockedExchange(&g_fx.found, 1);
@@ -686,7 +900,9 @@ static int fx_seen_add(const char *name, const BYTE *hdr, int done)
         k = g_fx.nseen++;
     } else {
         for (i = 0; i < g_fx.nseen; i++)
-            if (g_fx.seen[i].done && (k < 0 || g_fx.seen[i].time < g_fx.seen[k].time) && !fx_in_ring(g_fx.seen[i].name)) k = i;
+            if (g_fx.seen[i].done && g_fx.seen[i].req != FX_REQ_NEW && g_fx.seen[i].req != FX_REQ_KEPT &&
+                (k < 0 || g_fx.seen[i].time < g_fx.seen[k].time) && !fx_in_ring(g_fx.seen[i].name))
+                k = i;
         if (!g_fx.seen_full) base_log("ffxi: over %d messages in r\\b, the oldest are left as they are\r\n", FX_SEEN);
         g_fx.seen_full = 1;
         if (k < 0) return -1;
@@ -701,6 +917,7 @@ static int fx_seen_add(const char *name, const BYTE *hdr, int done)
         r->slot = MAIL(hdr)->from_slot;
         r->seq = MAIL(hdr)->seq;
         r->time = MAIL(hdr)->time;
+        if (pc_mail_kind(hdr) == 1 && (MAIL(hdr)->flags & MAIL_VALID)) r->req = FX_REQ_NEW;
     }
     r->first = GetTickCount();
     r->gen = g_fx.gen;
@@ -740,6 +957,38 @@ static int fx_ignored(const BYTE *hdr)
     }
     return 0;
 }
+/* the seen set doesn't keep headers, so each new request is decoded again */
+static void fx_requests(BYTE *b)
+{
+    __declspec(align(8)) BYTE hdr[sizeof(pol_mail)];
+    int i;
+    if (!fx_answers()) return;
+    for (i = 0; g_ig.written.me && i < g_fx.nseen; i++) {
+        fx_seen_rec *s = &g_fx.seen[i];
+        fx_request r;
+        if (s->req != FX_REQ_NEW) continue;
+        memset(hdr, 0, sizeof hdr);
+        if (pc_mail_decode_header(b, hdr, s->name) != 0) continue;
+        if (!message_store_owned(hdr, 1, g_ig.written.me) || pc_mail_receipt(hdr) || fx_ignored(hdr)) {
+            s->req = FX_REQ_DONE;
+            continue;
+        }
+        memset(&r, 0, sizeof r);
+        fx_sender(hdr, r.name);
+        if (!r.name[0]) {
+            s->req = FX_REQ_DONE;
+            continue;
+        }
+        r.seq = MAIL(hdr)->seq;
+        r.time = MAIL(hdr)->time;
+        r.lo = MAIL(hdr)->from_lo;
+        r.hi = MAIL(hdr)->from_hi;
+        r.slot = MAIL(hdr)->from_slot;
+        if (fx_req_add(&r)) s->req = FX_REQ_KEPT;
+    }
+    fx_req_sync();
+}
+
 /* the same test the hold uses: from me, and either one I sent or addressed back to the handle it came from */
 static int fx_bounced(const BYTE *hdr)
 {
@@ -845,11 +1094,22 @@ static int fx_take(const char *name, const BYTE *hdr)
     /* a bounce can be addressed to the friend it was for, so this goes before the owned check */
     if (kind == 0 && !pc_mail_receipt(hdr) && fx_bounced(hdr)) return fx_queue(FX_BOUNCE, "", "", NULL, NULL, 0) ? 1 : 2;
     if (!message_store_owned(hdr, 1, g_ig.written.me) || pc_mail_receipt(hdr) || fx_ignored(hdr)) return 1;
-    /* a friend request stays in r\b for Provenance to answer, it just gets a line. Anything about groups gets none */
-    if (kind == 1) {
+    /* a friend request, or the news that one was accepted, stays in r\b and just gets a line. Anything about groups gets none */
+    if (kind == 1 || kind == 9) {
         fx_sender(hdr, who);
-        lstrcpynA(text, who, sizeof text);
-        fx_append(text, sizeof text, " sent you a friend request.");
+        if (kind == 9) {
+            lstrcpynA(text, who, sizeof text);
+            fx_append(text, sizeof text, " accepted your friend request.");
+        } else if (fx_answers() && who[0]) {
+            lstrcpyA(text, "You've received a friend request from ");
+            fx_append(text, sizeof text, who);
+            fx_append(text, sizeof text, ". Respond with /fr ");
+            fx_append(text, sizeof text, who);
+            fx_append(text, sizeof text, " yes/no.");
+        } else {
+            lstrcpynA(text, who, sizeof text);
+            fx_append(text, sizeof text, " sent you a friend request.");
+        }
         return fx_queue(FX_NOTE, who, text, NULL, NULL, 0) ? 1 : 2;
     }
     if (kind != 0) return 1;
@@ -931,6 +1191,7 @@ static void fx_scan(BYTE *b, int seeding)
     g_fx.find = NULL;
     FindClose(h);
     fx_seen_prune();
+    fx_requests(b);
     if (seeding) base_log("ffxi: in the world, %d message(s) already in r\\b stay unread, new ones go to the chat log\r\n", n);
 }
 

@@ -24,6 +24,10 @@
 #define SIG_FX_LICENCE "89 5e 1c 89 5e 14 89 6e 18 89 ?? ?? ?? ?? ?? eb ?? 89 ?? ?? ?? ?? ?? 68" ANY16 ANY16 ANY16 ANY1 ANY1 ANY1
 #define SIG_FX_LOBBY "89 41 2c 8b 15 ?? ?? ?? ?? 89 7c 24 10 89 42 30 a1" ANY4
 #define SIG_FX_CHAR_INDEX "a1 ?? ?? ?? ?? 8d 0c 80 8d 14 48 a1 ?? ?? ?? ?? c1 e2 04 8d 4c 02 44"
+#define SIG_FX_DECLINE "8b 0d ?? ?? ?? ?? 85 c9 75 06 b8 02 00 00 00 c3 8b 44 24 20 8b 54 24 1c 50 8b 44 24 1c 52 8b 54 24 1c " \
+    "6a 00 6a 00 50 52 6a 0a 6a 00 8d 44 24 24 6a 00 50 e8 ?? ?? ?? ?? c3"
+#define SIG_FX_ACCEPT "8b 0d ?? ?? ?? ?? 85 c9 75 06 b8 02 00 00 00 c3 8b 44 24 24 8b 54 24 20 50 8b 44 24 20 52 8b 54 24 20 " \
+    "68 ?? ?? ?? ?? 50 8b 44 24 24 68 ?? ?? ?? ?? 52 8b 54 24 28 50 8b 44 24 28 52 8d 54 24 24 50 52 e8 ?? ?? ?? ?? c3"
 
 static struct hook_addr g_addr[ADDRESS_COUNT] = {
     /* starts on the push ebp, a detour past the frame setup leaves the stub's stack a dword off */
@@ -200,6 +204,10 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
         .usual = 0x6365a0, .sig_at = 0x23dc0d, .operand = 17, .sig = SIG_FX_LOBBY },
     [AT_FX_CHAR_INDEX] = { .name = "selected character", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
         .usual = 0x6365ac, .sig_at = 0x243e8d, .operand = 1, .sig = SIG_FX_CHAR_INDEX },
+    [AT_FX_FRIEND_DECLINE] = { .name = "friend request decline", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
+        .usual = 0xf72c0, .sig_at = 0xf72c0, .operand = ADDR_MATCH, .sig = SIG_FX_DECLINE },
+    [AT_FX_FRIEND_ACCEPT] = { .name = "friend request accept", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
+        .usual = 0xf7350, .sig_at = 0xf7350, .operand = ADDR_MATCH, .sig = SIG_FX_ACCEPT },
 };
 
 typedef struct {
