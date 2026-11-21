@@ -130,14 +130,16 @@ static int lb_same_name(const char *entry, const char *want)
     return 0;
 }
 
+/* spaces don't count, the list pads a world's name with them */
 static int lb_same_world(const char *entry, const char *want)
 {
-    int n = 0, i;
-    while (n < LB_NAME && entry[n]) n++;
-    while (n && entry[n - 1] == ' ') n--;
-    for (i = 0; i < n; i++)
-        if (!want[i] || lb_fold(entry[i]) != lb_fold(want[i])) return 0;
-    return !want[n];
+    int i = 0, k = 0;
+    for (;; i++, k++) {
+        while (i < LB_NAME && entry[i] == ' ') i++;
+        while (want[k] == ' ') k++;
+        if (i >= LB_NAME || !entry[i]) return !want[k];
+        if (!want[k] || lb_fold(entry[i]) != lb_fold(want[k])) return 0;
+    }
 }
 
 static int lb_entry_usable(const BYTE *e)
@@ -149,15 +151,22 @@ static int lb_entry_usable(const BYTE *e)
 static int lb_pick(ULONGLONG now)
 {
     BYTE *m = lb_menu(AT_FX_CHAR_LIST_MENU);
-    int k, hits = 0, at = -1, used = 0;
+    int k, hits = 0, at = -1, used = 0, named = 0, only = -1;
     if (!m) return 0;
     for (k = 0; k < LB_ENTRIES; k++) {
         const BYTE *e = m + 0x34 + LB_STRIDE * k;
         used += *(const int *)(e + 0x34) == 1;
         if (!lb_same_name((const char *)e + 0x10, g_lb.name)) continue;
+        named++;
+        only = k;
         if (g_lb.world[0] && !lb_same_world((const char *)e + 0x20, g_lb.world)) continue;
         hits++;
         at = k;
+    }
+    /* the world's only there to tell two with one name apart */
+    if (!hits && named == 1) {
+        hits = 1;
+        at = only;
     }
     if (!g_lb.list_at) g_lb.list_at = now;
     if (!used && now - g_lb.list_at < LB_LIST_MS) return 0;
@@ -173,7 +182,7 @@ static int lb_pick(ULONGLONG now)
         return 1;
     }
     g_lb.stage = LB_FINISHED;
-    base_log(hits > 1 ? "lobby: more than one character has that name, the pick's left to the player\r\n"
+    base_log(hits > 1 || (!hits && named) ? "lobby: more than one character has that name, the pick's left to the player\r\n"
              : hits ? "lobby: that character can't be logged in to, the pick's left to the player\r\n"
                     : "lobby: that character isn't in the list, the pick's left to the player\r\n");
     return 1;

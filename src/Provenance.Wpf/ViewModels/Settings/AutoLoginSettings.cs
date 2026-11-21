@@ -61,10 +61,7 @@ public sealed partial class AutoLoginSettings : ObservableObject
         _loading = false;
     }
 
-    // a world only goes next to a name when two characters share it
-    private static IEnumerable<string> Shown(Account p) =>
-        p.Characters.Select(c => c.World is not null && p.Characters.Count(o => string.Equals(o.Name, c.Name, StringComparison.OrdinalIgnoreCase)) > 1
-                                 ? $"{c.Name} ({c.World})" : c.Name);
+    private static IEnumerable<string> Shown(Account p) => p.Characters.Select(c => c.World is not null ? $"{c.Name} ({c.World})" : c.Name);
 
     private void Picked(AutoLoginRow row)
     {

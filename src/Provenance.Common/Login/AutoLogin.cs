@@ -1,3 +1,4 @@
+using System.Globalization;
 using Provenance.Common.Settings;
 using Provenance.Common.Social;
 
@@ -28,14 +29,24 @@ public static class AutoLogin
     {
         var found = HandleOrder.Listed(snap.ContentIds)
             .Where(c => c.Type == ContentIdType.Ffxi && IsName(c.Name?.Trim()))
-            .Select(c => new AccountCharacter(c.Name.Trim(), c.Text?.Trim() is { } world && IsWorld(world) ? world : null))
+            .Select(c => new AccountCharacter(c.Name.Trim(), World(c.Key)))
             .DistinctBy(c => (c.Name.ToLowerInvariant(), c.World?.ToLowerInvariant()))
             .ToList();
         if (found.Count == 0 || found.SequenceEqual(account.Characters)) return false;
         account.Characters = found;
-        if (account.AutoLoginCharacter is not null && !found.Any(c => Chosen(account, c))) (account.AutoLoginCharacter, account.AutoLoginWorld) = (null, null);
+        if (account.AutoLoginCharacter is { } chosen && !found.Any(c => Chosen(account, c)))
+        {
+            // one saved with no world takes the world of the only character by that name
+            var named = account.AutoLoginWorld is null ? found.Where(c => string.Equals(c.Name, chosen, StringComparison.OrdinalIgnoreCase)).ToList() : [];
+            (account.AutoLoginCharacter, account.AutoLoginWorld) = named.Count == 1 ? (named[0].Name, named[0].World) : (null, null);
+        }
         return true;
     }
+
+    // the key is the content ID's two numbers in hex, and the world is the second byte of the first
+    private static string? World(string key) =>
+        key.Length >= 8 && uint.TryParse(key.AsSpan(0, 8), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var id)
+            ? FfxiWorlds.Name((int)(id >> 16 & 0xff)) : null;
 
     public static bool Chosen(Account account, AccountCharacter c) =>
         string.Equals(c.Name, account.AutoLoginCharacter, StringComparison.OrdinalIgnoreCase)
