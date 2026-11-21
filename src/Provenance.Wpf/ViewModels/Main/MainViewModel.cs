@@ -49,7 +49,7 @@ public partial class MainViewModel : ObservableObject
 
     public MainViewModel(IDialogs dialogs, IWindowManager windows, ICredentialService credentials, ISettingsService settings,
                          FeedService feeds, PolSession pol, AvatarService avatars, TimeProvider? time = null, GameLaunch? launch = null,
-                         Func<Task<bool>>? prepareRestart = null)
+                         Func<Task<bool>>? prepareRestart = null, RefusedPasswords? refused = null)
     {
         _dialogs = dialogs;
         _windows = windows;
@@ -88,6 +88,11 @@ public partial class MainViewModel : ObservableObject
         Multi = new MultiRunViewModel(dialogs, settings, credentials, pol, _ui, Accounts, Session, _launch,
             new MultiRunLinks(SetPhase, EnsureMemberAgreement, PromptHandleName, GameStart.BackUpGameSettingsAsync));
         Multi.UpdateBusy = () => UpdatingNow;
+        _refused = refused ?? new RefusedPasswords(settings);
+        _accountCheck = Accounts.Check = new AccountCheck(dialogs, pol, _launch, _refused,
+            () => GameInstalled && Session.Phase == SessionPhase.LoggedOut && !Session.PolInUse && !Multi.Running && !UpdatingNow,
+            AcceptsMemberAgreement, Accounts.AskOtp);
+        _accountCheck.RunningChanged += () => LogInCommand.NotifyCanExecuteChanged();
         _updateRestart.BusyChanged += () =>
         {
             OnPropertyChanged(nameof(PlayEnabled));
@@ -405,7 +410,24 @@ public partial class MainViewModel : ObservableObject
         (await _launch.LogInAsync(new LaunchLogin(p, pol, squareEnix, otp, Accounts.EnsureHomeSlot(p), stillLean is not null, null, progress,
                                                   PromptHandleName, stillLean), token)).Code;
 
-    private bool CanLogin() => !IsLaunching && !Multi.Running && !UpdatingNow;
+    private readonly AccountCheck _accountCheck;
+    private readonly RefusedPasswords _refused;
+
+    private bool CanLogin() => !IsLaunching && !Multi.Running && !UpdatingNow && !_accountCheck.Running;
+
+    private void NoteLogin(string polId, int code)
+    {
+        try
+        {
+            switch (AccountCheckRules.Judge(code, _pol.LastRefusalReason))
+            {
+                case AccountCheckVerdict.Accepted: _refused.Clear(polId); break;
+                case AccountCheckVerdict.Refused: _refused.Add(polId); break;
+                case AccountCheckVerdict.Locked: _refused.MarkLocked(polId); break;
+            }
+        }
+        catch (Exception ex) { Log.Warning(ex, "Could not update the count of refused passwords"); }
+    }
 
     [RelayCommand(CanExecute = nameof(CanLogin))]
     private Task LogInAsync() => _connectTask = ConnectSocialAsync();
@@ -619,6 +641,7 @@ public partial class MainViewModel : ObservableObject
         _ui.Run(() =>
         {
             timer?.Lap("wait for the UI thread");
+            if (_accountCheck.Capture(snap)) return;
             if (_pol.Pid is null) return;
             if (Multi.Running) { Multi.RunSnapshot = snap; return; }
             // the sampler's, while the game runs: the friends and my status, and nothing the hold's last one had that can change
@@ -762,7 +785,7 @@ public partial class MainViewModel : ObservableObject
     private async Task ConnectSocialAsync()
     {
         Log.Information("Log in pressed");
-        if (Accounts.SelectedProfile == null && !Accounts.TryAddAccount()) { _launch.DropAhead(); return; }
+        if (Accounts.SelectedProfile == null && !Accounts.TryAddAccount(check: false)) { _launch.DropAhead(); return; }
         if (ShowSetupCard) { _launch.DropAhead(); return; }
         if (Accounts.SelectedProfile is not { } profile) { _launch.DropAhead(); return; }
         bool lean = Lean.Open();
@@ -794,6 +817,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             int code = await ConnectProfileAsync(profile, pol, squareEnix, otp, progress, token, Lean.BeforePol(profile.Id, token));
+            NoteLogin(pol.PolId, code);
             await _ui.Flush();   // queued progress reports have to land first (yes, really)
             if (code == 0 && Lean.Running) (code, lastFailure, gameRan) = await Lean.AfterLogInAsync(profile.Id, token);
             if (gameRan) return;
@@ -849,12 +873,18 @@ public partial class MainViewModel : ObservableObject
 
     internal bool EnsureMemberAgreement()
     {
+        if (AcceptsMemberAgreement()) return true;
+        Notice.Show("You're not logged in, because you didn't accept the PlayOnline Member Agreement.", "InformationOutline");
+        return false;
+    }
+
+    private bool AcceptsMemberAgreement()
+    {
         if (_settings.Current.AcceptedMemberAgreement) return true;
         if (!PolPaths.Supported(_settings.DetectedRegion)) return true;
         if (!_dialogs.AskAgreement(Viewer.Strings()))
         {
             Log.Information("Member Agreement declined: not logging in");
-            Notice.Show("You're not logged in, because you didn't accept the PlayOnline Member Agreement.", "InformationOutline");
             return false;
         }
         _settings.SaveChange(s => s.AcceptedMemberAgreement = true);

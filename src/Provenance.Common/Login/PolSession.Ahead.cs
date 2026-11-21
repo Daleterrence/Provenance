@@ -170,7 +170,7 @@ public sealed partial class PolSession
         {
             var current = _ahead;
             _ahead = null;
-            if (current is not null && current.Matches(profileId, Platform, options)) taken = current;
+            if (current is not null && current.Matches(profileId, PlatformFor(options), options)) taken = current;
             else dropped = current;
             gone = dropped is null ? _aheadGone : RetireLocked(dropped);
         }

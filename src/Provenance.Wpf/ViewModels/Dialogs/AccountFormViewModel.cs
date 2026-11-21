@@ -54,6 +54,8 @@ public sealed partial class AccountFormViewModel : ObservableObject
     [ObservableProperty] private string _otpItemHint = "";
     [ObservableProperty] private string _otpSourceHelp = "";
     [ObservableProperty, NotifyPropertyChangedFor(nameof(ErrorVisible))] private string _errorText = "";
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(Editing), nameof(ErrorVisible))] private bool _checking;
+    [ObservableProperty] private string _checkText = AccountCheckRules.VerifyingText;
     [ObservableProperty] private bool _toolPanelVisible;
     [ObservableProperty] private bool _toolSpinnerVisible;
     [ObservableProperty] private bool _toolSpinnerIndeterminate = true;
@@ -75,7 +77,9 @@ public sealed partial class AccountFormViewModel : ObservableObject
 
     public bool LoginEnabled => !LoginWaiting;
 
-    public bool ErrorVisible => ErrorText.Length > 0;
+    public bool ErrorVisible => ErrorText.Length > 0 && !Checking;
+
+    public bool Editing => !Checking;
 
     internal AccountFormViewModel(string? accountName, bool useOtp, bool edit, string otpSource, string otpItem, bool requireAll,
                                   string polId, string squareEnixId, string otpAccount)

@@ -16,7 +16,7 @@ public sealed partial class PolSession
     internal TimeSpan EarlyEndGrace { get; init; } = TimeSpan.FromSeconds(3);
     internal EarlyStart.Chain? EarlyChain { get; init; }
 
-    private bool ThirdPartyLogin => Platform is ThirdPartyHook.Ashita or ThirdPartyHook.Windower;
+    private bool ThirdPartyLogin(SessionOptions options) => PlatformFor(options) is ThirdPartyHook.Ashita or ThirdPartyHook.Windower;
 
     private sealed class EarlyLogin(PolSession owner, LoginRequest request, string viewerDir, string polExe, string launcherExe, CancellationToken ct,
                                     bool ahead = false)
@@ -32,7 +32,7 @@ public sealed partial class PolSession
 
         internal WindowerUpdateAnswers Answers => _answers;
 
-        private bool Wanted => owner.ThirdPartyLogin && !owner.Prestarter.Holding;
+        private bool Wanted => owner.ThirdPartyLogin(request.Options) && !owner.Prestarter.Holding;
 
         // Large Address Aware takes the update lock itself, so it goes in before this copy holds it for the check
         internal void BeforeLock()

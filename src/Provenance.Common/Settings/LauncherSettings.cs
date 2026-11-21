@@ -88,6 +88,8 @@ public sealed class LauncherSettings
     public Dictionary<string, WindowPlace> WindowPlaces { get; set; } = [];
 
     public string BackupFolder { get; set; } = "";
+
+    public Dictionary<string, int> PasswordRefusals { get; set; } = [];
 }
 
 public sealed class WindowPlace

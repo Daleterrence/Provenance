@@ -8,7 +8,7 @@
         Style="{StaticResource DialogCard}" CardMargin="12">
 
     <Grid Margin="26,22" RowDefinitions="*,Auto">
-        <controls:BodyScroller>
+        <controls:BodyScroller IsEnabled="{Binding Editing}">
             <StackPanel>
                 <TextBlock x:Name="HeaderText" Text="{Binding Header}" FontSize="18" FontWeight="SemiBold" />
                 <TextBlock x:Name="AgainText" Visibility="{Binding AgainVisible, Converter={StaticResource BoolToVis}}" Margin="0,8,0,0" TextWrapping="Wrap" FontSize="13"
@@ -121,10 +121,17 @@
                        Foreground="{DynamicResource State.Down}" Text="{Binding ErrorText}"
                        Visibility="{Binding ErrorVisible, Converter={StaticResource BoolToVis}}" />
 
+            <Grid x:Name="CheckLine" Margin="0,12,0,0" ColumnDefinitions="Auto,*"
+                  Visibility="{Binding Checking, Converter={StaticResource BoolToVis}}">
+                <ProgressBar Width="14" Height="14" VerticalAlignment="Top" Margin="0,1,8,0" Style="{StaticResource Spinner}" IsIndeterminate="True" />
+                <TextBlock x:Name="CheckText" Grid.Column="1" FontSize="12" TextWrapping="Wrap"
+                           Foreground="{DynamicResource Text.2}" Text="{Binding CheckText}" />
+            </Grid>
+
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
                 <Button Content="CANCEL" Width="100" Margin="0,0,10,0" IsCancel="True"
                         Style="{StaticResource RedButton}" Click="OnCancel" />
-                <Button Content="SAVE" Width="100" IsDefault="True"
+                <Button Content="SAVE" Width="100" IsDefault="True" IsEnabled="{Binding Editing}"
                         Style="{StaticResource PolButton}" Click="OnSave" />
             </StackPanel>
         </StackPanel>

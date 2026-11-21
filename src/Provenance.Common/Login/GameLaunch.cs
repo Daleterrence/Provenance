@@ -22,7 +22,7 @@ public sealed record ClaimResult(string? Otp, string? InUse, bool OtpCancelled)
 
 public sealed record LaunchLogin(Account Account, PolAccount Pol, SquareEnixAccount SquareEnix, string Otp, int HomeSlot, bool Lean,
                                  string? ThirdPartyHookProfile, IProgress<LaunchProgress>? Progress, Func<string?>? AskHandleName,
-                                 Func<bool>? BeforePol = null)
+                                 Func<bool>? BeforePol = null, bool Plain = false)
 {
     private bool PrintMembers(System.Text.StringBuilder builder)
     {
@@ -86,7 +86,7 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
             Progress = l.Progress,
             AskHandleName = l.AskHandleName,
             BeforePol = l.BeforePol,
-            Options = new SessionOptions(l.Lean, l.ThirdPartyHookProfile, l.HomeSlot, HandleKey: l.Account.HandleKey),
+            Options = new SessionOptions(l.Lean, l.ThirdPartyHookProfile, l.HomeSlot, HandleKey: l.Account.HandleKey, Plain: l.Plain),
         }, ct);
         return new(code, pol.LastRefusalReason);
     }

@@ -83,9 +83,11 @@ public sealed partial class PolSession : IDisposable
 
     public event Action<string>? SessionEnded;
 
-    public int? LastRefusalReason { get; private set; }
+    public int? LastRefusalReason { get; internal set; }
 
     public ThirdPartyHook Platform => _settings.Current.ThirdPartyHookPlatform;
+
+    internal ThirdPartyHook PlatformFor(SessionOptions options) => options.Plain ? ThirdPartyHook.None : Platform;
 
     public async Task<int> ConnectAsync(LoginRequest request, CancellationToken ct = default)
     {
@@ -293,7 +295,7 @@ public sealed partial class PolSession : IDisposable
     {
         var progress = request.Progress;
         var options = request.Options;
-        var platform = Platform;
+        var platform = PlatformFor(options);
         if (platform == ThirdPartyHook.Ashita)
         {
             return AshitaLauncher.StartViaAshita(_settings, _watcher, psi, polExe, launchId, options.ThirdPartyHookProfile,

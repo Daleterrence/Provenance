@@ -199,9 +199,33 @@ public partial class AccountsViewModel : ObservableObject
     [RelayCommand]
     private void AddAccount() => TryAddAccount();
 
-    internal bool TryAddAccount()
+    internal AccountCheck? Check { get; set; }
+
+    private Account NewProfile(AccountDialogResult r)
     {
-        var r = _dialogs.AskAccount(null, false, edit: false);
+        string name = "New account";
+        for (int n = 2; Profiles.Any(p => string.Equals(p.DisplayName, name, StringComparison.Ordinal)); n++)
+            name = $"New account {n}";
+        return new Account { DisplayName = name, UseOtp = r.UseOtp, OtpSource = r.OtpSource, OtpItem = r.OtpItem, OtpAccount = r.OtpAccount };
+    }
+
+    internal bool TryAddAccount(bool check = true)
+    {
+        Account? tried = null;
+        PolSocialSnapshot? seen = null;
+        AccountChecker? checker = check && Check is { } verifier
+            ? async (typed, ct) =>
+            {
+                tried = null;
+                seen = null;
+                if (ProfileWithPolId(typed.PolId) is not null) return new(true);
+                var profile = NewProfile(typed);
+                var done = await verifier.RunAsync(profile, typed, ct);
+                if (done.Answer.Finish) (tried, seen) = (profile, done.Snapshot);
+                return done.Answer;
+            }
+        : null;
+        var r = _dialogs.AskAccount(null, false, edit: false, check: checker);
         if (r == null) return false;
         if (ProfileWithPolId(r.PolId) is { } same)
         {
@@ -210,11 +234,7 @@ public partial class AccountsViewModel : ObservableObject
             SelectedProfile = same;
             return false;
         }
-        string name = "New account";
-        for (int n = 2; Profiles.Any(p => string.Equals(p.DisplayName, name, StringComparison.Ordinal)); n++)
-            name = $"New account {n}";
-        var profile = new Account { DisplayName = name, UseOtp = r.UseOtp,
-                                    OtpSource = r.OtpSource, OtpItem = r.OtpItem, OtpAccount = r.OtpAccount };
+        var profile = tried ?? NewProfile(r);
         _credentials.SavePolAccount(profile.Id, new PolAccount(r.PolId, r.PolPassword));
         try { _credentials.SaveSquareEnixAccount(profile.Id, new SquareEnixAccount(r.SeaId, r.SeaPassword)); }
         catch
@@ -226,6 +246,7 @@ public partial class AccountsViewModel : ObservableObject
         Profiles.Add(profile);
         PersistProfileList(slots: true);
         SelectedProfile = profile;
+        if (seen is { } snap) LearnIdentity(profile.Id, snap);
         Log.Information("Added account {Id}", profile.Id);
         return true;
     }

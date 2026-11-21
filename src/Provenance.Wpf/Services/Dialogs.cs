@@ -1,6 +1,7 @@
 using Provenance.Common.Login;
 using Provenance.Common.Social;
 using Provenance.Wpf.ViewModels.Chat;
+using Provenance.Wpf.ViewModels.Main;
 using Provenance.Wpf.ViewModels.Shared;
 using Provenance.Wpf.Views.Chat;
 using Provenance.Wpf.Views.Dialogs;
@@ -21,7 +22,8 @@ public interface IDialogs
     string? PickFolder(string title);
     string? PickFile(string title, string filter, string folder);
     AccountDialogResult? AskAccount(string? accountName, bool useOtp, bool edit, string otpSource = "", string otpItem = "",
-                                    bool requireAll = false, string polId = "", string squareEnixId = "", string otpAccount = "");
+                                    bool requireAll = false, string polId = "", string squareEnixId = "", string otpAccount = "",
+                                    AccountChecker? check = null);
     string? AskOtp(string source, string item, string reuseKey, string squareEnixId, string account);
     bool AskAgreement(IReadOnlyDictionary<int, string>? strings);
     ChatRoomForm? AskRoom(IReadOnlyList<ChatZone> zones, int zone, IReadOnlyList<ChatCategory> categories, Func<string, bool> confirm);
@@ -73,8 +75,9 @@ public sealed class WpfDialogs : IDialogs
     }
 
     public AccountDialogResult? AskAccount(string? accountName, bool useOtp, bool edit, string otpSource = "", string otpItem = "",
-                                           bool requireAll = false, string polId = "", string squareEnixId = "", string otpAccount = "") =>
-        AccountDialog.Show(WindowOwner.Find(), accountName, useOtp, edit, otpSource, otpItem, requireAll, polId, squareEnixId, otpAccount);
+                                           bool requireAll = false, string polId = "", string squareEnixId = "", string otpAccount = "",
+                                           AccountChecker? check = null) =>
+        AccountDialog.Show(WindowOwner.Find(), accountName, useOtp, edit, otpSource, otpItem, requireAll, polId, squareEnixId, otpAccount, check);
 
     public string? AskOtp(string source, string item, string reuseKey, string squareEnixId, string account) =>
         OtpDialog.Ask(WindowOwner.Find(), source, item, reuseKey, squareEnixId, account);
