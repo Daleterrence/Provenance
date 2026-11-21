@@ -13,6 +13,8 @@ public static class Program
     internal static void StartLogging(string folder) =>
         LogSetup.ToDailyFile(folder, "launcher", 14, LogEventLevel.Debug, LogSetup.AppTemplate);
 
+    internal static string? LogsProblem { get; private set; }
+
     [STAThread]
     public static void Main()
     {
@@ -20,7 +22,8 @@ public static class Program
         ThreadStaticsFix.Apply();
         bool ownsNewFiles = ProtectedFolders.OwnNewFilesAsAdministrators();
         // never the player's own folders, a link there would be written through
-        if (LogSetup.ElevatedFolder() is { } logs) StartLogging(logs);
+        if (LogSetup.ElevatedFolder(out var problem) is { } logs) StartLogging(logs);
+        else LogsProblem = problem;
         if (!ownsNewFiles) Log.Warning("New files won't be Administrators' if this PC's policy says otherwise");
         // before any window, UpdateManager can't find the install without it
         if (SelfUpdate.InstalledCopy)

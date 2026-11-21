@@ -12,10 +12,20 @@ public static class LogSetup
 
     private const string PlainTemplate = "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}";
 
-    public static string? ElevatedFolder()
+    public static string? ElevatedFolder() => ElevatedFolder(out _);
+
+    public static string? ElevatedFolder(out string? problem)
     {
-        try { return ProtectedFolders.RootSubDir(AppPaths.LogsFolder, usersMayRead: true); }
-        catch (Exception) { return null; }
+        try
+        {
+            problem = null;
+            return ProtectedFolders.RootSubDir(AppPaths.LogsFolder, usersMayRead: true);
+        }
+        catch (Exception ex)
+        {
+            problem = string.IsNullOrWhiteSpace(ex.Message) ? ex.GetType().Name : ex.Message;
+            return null;
+        }
     }
 
     public static void ToDailyFile(string folder, string name, int keepFiles, LogEventLevel minimum = LogEventLevel.Information,

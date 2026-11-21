@@ -92,6 +92,7 @@ public partial class App : Application
         _ = SelfUpdate.TellIfUpdateWaiting(mainVm.UpdateNotice);
         SelfUpdate.TellIfHeldBack(args, mainVm.Notice);
         StartMainViewModel(mainVm, noAutoLogin);
+        _ = Dispatcher.InvokeAsync(() => LogsNotice.Tell(WpfDialogs.Default, Program.LogsProblem));
     }
 
     internal static void StartPolEarly(Action noteScreenSaver, Action endOrphans, Action startPol)

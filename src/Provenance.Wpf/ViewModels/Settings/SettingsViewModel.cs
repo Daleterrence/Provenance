@@ -122,6 +122,7 @@ public partial class SettingsViewModel : ObservableObject, IDisposable
     public IReadOnlyList<ThemeTile> ThemeTiles { get; }
     public OpenFolder OpenViewerFolder { get; }
     public OpenFolder OpenFfxiFolder { get; }
+    public OpenLogs Logs { get; } = new();
     public HandlesViewModel Handles { get; }
     public string RegionText { get; }
     public string ViewerFolder { get; }

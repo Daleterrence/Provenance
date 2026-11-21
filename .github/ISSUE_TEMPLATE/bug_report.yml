@@ -41,4 +41,4 @@ body:
     id: log
     attributes:
       label: Log file
-      description: Drag in the log from the day it happened. They're in `C:\ProgramData\Provenance\logs`, named `launcher-` and the date. Give it a quick read first, it has your Windows user name in folder paths.
+      description: Drag in the log from the day it happened. They're in `C:\ProgramData\Provenance\logs`, named `launcher-` and the date. `C:\ProgramData` is a hidden folder, so paste that path into File Explorer's address bar, or use the folder button next to Logs folder on the General page in Settings. Give it a quick read first, it has your Windows user name in folder paths.

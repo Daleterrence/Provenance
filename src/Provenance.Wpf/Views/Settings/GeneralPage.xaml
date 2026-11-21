@@ -26,6 +26,17 @@
                     <controls:SvgIcon Glyph="folder" Width="20" Height="20" />
                 </Button>
             </Grid>
+            <TextBlock Text="Logs folder" Style="{StaticResource Label}" />
+            <Grid Margin="0,0,0,10" ColumnDefinitions="*,Auto" DataContext="{Binding Logs}">
+                <TextBlock Text="{Binding Folder}" TextWrapping="Wrap" Foreground="{DynamicResource Text.2}" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Margin="8,0,0,0" Width="32" Height="32" Padding="0" VerticalAlignment="Center"
+                        Style="{StaticResource IconButton}" Foreground="{DynamicResource Text.2}"
+                        Command="{Binding OpenCommand}" ToolTip="Open folder" AutomationProperties.Name="Open the logs folder">
+                    <controls:SvgIcon Glyph="folder" Width="20" Height="20" />
+                </Button>
+            </Grid>
+            <TextBlock DataContext="{Binding Logs.Status}" Text="{Binding Text}" behaviours:State.IsError="{Binding IsError}"
+                       Style="{StaticResource ProfileStatusText}" />
             <HeaderedContentControl Header="News region" Margin="0,4,0,22" Tag="This is the PlayOnline site the news and server status come from.">
                 <ComboBox ItemsSource="{Binding FeedRegionChoices}" SelectedIndex="{Binding FeedRegionIndex}" AutomationProperties.Name="News region" />
             </HeaderedContentControl>
