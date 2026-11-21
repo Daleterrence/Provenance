@@ -35,4 +35,5 @@ public sealed class Account
     public int? AutoLoginSlot { get; set; }
 }
 
-public sealed record AccountCharacter(string Name, string? World);
+// the slot is its place on the game's character list, known once the game has shown it
+public sealed record AccountCharacter(string Name, string? World, int? Slot = null);

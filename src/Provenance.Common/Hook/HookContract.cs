@@ -108,7 +108,7 @@ public static class HookContract
         public const string Ended = "ended";
         public const string Go = "go";
         public const string Lobby = "lobby";
-        public const string Picked = "picked";
+        public const string Slots = "slots";
         public const string Stop = "stop";
         public const string Prestart = "prestart";
         public const string Taking = ".taking";

@@ -86,6 +86,12 @@ public static class HookFiles
         }
     }
 
+    public static bool Any(string name)
+    {
+        try { return _dir is { } dir && Directory.EnumerateFiles(dir, string.Format(CultureInfo.InvariantCulture, HookContract.Files.Name, "*", name)).Any(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return false; }
+    }
+
     public static void Delete(int pid, string name)
     {
         FileDelete.Try(PathFor(pid, name));
@@ -94,7 +100,7 @@ public static class HookFiles
     public static void ClearFor(int pid)
     {
         foreach (var name in new[] { HookContract.Files.Social, HookContract.Files.Store, HookContract.Files.ChatRoom,
-                                     HookContract.Files.GroupChat, HookContract.Files.Lobby, HookContract.Files.Picked })
+                                     HookContract.Files.GroupChat, HookContract.Files.Lobby, HookContract.Files.Slots })
             Delete(pid, name);
         foreach (var name in HookContract.Requests.All)
             Discard(pid, name);
@@ -156,6 +162,7 @@ public static class HookFiles
         public const int ChatRoom = 4 * 1024 * 1024;
         public const int GroupChat = 4 * 1024 * 1024;
         public const int MyProfile = 1024 * 1024;
+        public const int Slots = 4096;
     }
 
     // the hook may have it open for writing and swap it at any moment, so it's read sharing both

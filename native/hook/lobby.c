@@ -1,13 +1,13 @@
 enum { LB_NAME = 16, LB_ENTRIES = 16, LB_STRIDE = 0xb0, LB_PICK_MS = 10000, LB_LIST_MS = 5000, LB_SETTLE_MS = 500, LB_REPICK_MS = 500,
-       LB_PICK_TRIES = 4, LB_ERROR_MS = 5000, LB_WORLD_MS = 120000, LB_RETRIES = 3 };
+       LB_PICK_TRIES = 4, LB_ERROR_MS = 5000, LB_WORLD_MS = 120000, LB_RETRIES = 3, LB_CHARS = LB_ENTRIES * (2 * LB_NAME + 4) };
 enum { LB_NONE, LB_LICENCE, LB_LOBBY, LB_LIST, LB_CONFIRM, LB_OK };
 enum { LB_PICKING, LB_AWAIT_CONFIRM, LB_AWAIT_WORLD, LB_FINISHED };
 
 static struct {
-    int licence, picking, slot, told, stage, answered, tried, picks, retries;
-    int licence_off, picking_off;
-    char name[LB_NAME], world[LB_NAME];
-    ULONGLONG started_at, next_look, picked_at, list_at, confirmed_at, error_at;
+    int licence, picking, slot, stage, answered, tried, picks, retries;
+    int licence_off, picking_off, chars_off, chars_n, chars_told;
+    char name[LB_NAME], world[LB_NAME], chars[LB_CHARS];
+    ULONGLONG started_at, next_look, picked_at, list_at, confirmed_at, error_at, chars_at;
 } g_lb;
 
 static const int g_lb_licence_needs[] = { AT_FX_MENU_FRONT, AT_FX_LICENCE_MENU };
@@ -153,22 +153,55 @@ static int lb_same_world(const char *entry, const char *want)
     }
 }
 
-/* which character a slot turned out to be, for the app. The name never goes in the log */
-static void lb_tell_pick(const BYTE *e)
+/* a line a character: its place on the list counted from 1, its name, its world */
+static int lb_chars_text(const BYTE *m, char *out)
 {
-    char path[MAX_PATH + 64], text[2 * LB_NAME + 2];
+    int k, i, from, n = 0;
+    for (k = 0; k < LB_ENTRIES; k++) {
+        const BYTE *e = m + 0x34 + LB_STRIDE * k;
+        if (*(const int *)(e + 0x34) != 1) continue;
+        from = n;
+        if (k >= 9) out[n++] = '1';
+        out[n++] = (char)('0' + (k + 1) % 10);
+        out[n++] = '\t';
+        for (i = 0; i < LB_NAME && e[0x10 + i] > 0x20 && e[0x10 + i] < 0x7f; i++) out[n++] = (char)e[0x10 + i];
+        /* a name ends inside its 16 bytes, one that doesn't isn't a character */
+        if (!i || i == LB_NAME || e[0x10 + i]) {
+            n = from;
+            continue;
+        }
+        out[n++] = '\t';
+        for (i = 0; i < LB_NAME && e[0x20 + i] >= 0x20 && e[0x20 + i] < 0x7f; i++) out[n++] = (char)e[0x20 + i];
+        out[n++] = '\n';
+    }
+    return n;
+}
+
+/* the game's character list for the app, once it has read the same for half a second */
+static void lb_tell_chars(ULONGLONG now)
+{
+    char text[LB_CHARS], path[MAX_PATH + 64];
     DWORD wrote = 0;
     HANDLE f;
-    int n = 0, i;
-    for (i = 0; i < LB_NAME && e[0x10 + i]; i++) text[n++] = (char)e[0x10 + i];
-    text[n++] = '\n';
-    for (i = 0; i < LB_NAME && e[0x20 + i]; i++) text[n++] = (char)e[0x20 + i];
-    text[n++] = '\n';
-    base_ipc_file(path, IPC_PICKED);
+    BYTE *m;
+    int n;
+    if (!g_fx.resolved || !pc_addr_found(AT_FX_CHAR_LIST_MENU) || !(m = lb_menu(AT_FX_CHAR_LIST_MENU))) return;
+    if (!(n = lb_chars_text(m, text))) return;
+    if (n != g_lb.chars_n || memcmp(text, g_lb.chars, (size_t)n)) {
+        memcpy(g_lb.chars, text, (size_t)n);
+        g_lb.chars_n = n;
+        g_lb.chars_at = now;
+        g_lb.chars_told = 0;
+        return;
+    }
+    if (g_lb.chars_told || now - g_lb.chars_at < LB_SETTLE_MS) return;
+    base_ipc_file(path, IPC_SLOTS);
     f = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f == INVALID_HANDLE_VALUE) return;
     WriteFile(f, text, (DWORD)n, &wrote, NULL);
     CloseHandle(f);
+    g_lb.chars_told = 1;
+    base_log("lobby: told Provenance the character list\r\n");
 }
 
 static int lb_entry_usable(const BYTE *e)
@@ -208,10 +241,6 @@ static int lb_pick(ULONGLONG now)
         g_lb.stage = LB_AWAIT_CONFIRM;
         g_lb.picked_at = now;
         base_log(g_lb.picks++ ? "lobby: the game cleared that, picked the character again\r\n" : "lobby: picked a character in the list\r\n");
-        if (g_lb.slot && !g_lb.told) {
-            g_lb.told = 1;
-            lb_tell_pick(m + 0x34 + LB_STRIDE * at);
-        }
         return 1;
     }
     g_lb.stage = LB_FINISHED;
@@ -359,11 +388,12 @@ static void lb_step(void)
 static void lb_tick(BYTE *b)
 {
     (void)b;
-    if (!lb_licence_on() && !lb_picking_on()) return;
+    if (g_lb.chars_off && !lb_wanted()) return;
     __try {
-        lb_step();
+        if (lb_wanted()) lb_step();
+        if (!g_lb.chars_off) lb_tell_chars(GetTickCount64());
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        g_lb.licence_off = g_lb.picking_off = 1;
+        g_lb.licence_off = g_lb.picking_off = g_lb.chars_off = 1;
         base_log("lobby: fault %08x, the lobby's left to the player for the rest of this game\r\n", GetExceptionCode());
     }
 }

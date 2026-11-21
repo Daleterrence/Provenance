@@ -31,7 +31,7 @@ public sealed partial class AutoLoginSettings : ObservableObject
     internal AutoLoginSettings(ISettingsService settings)
     {
         _settings = settings;
-        TakePicks = () => LobbyPicks.Take(settings);
+        TakeList = () => LobbyList.Take(settings);
         Load();
     }
 
@@ -41,11 +41,11 @@ public sealed partial class AutoLoginSettings : ObservableObject
 
     partial void OnAcceptLicenceChanged(bool value) { if (!_loading) _settings.SaveChange(s => s.AcceptLicenceAgreement = value); }
 
-    internal Action TakePicks { get; set; }
+    internal Action TakeList { get; set; }
 
     internal void Load()
     {
-        TakePicks();
+        TakeList();
         _loading = true;
         var s = _settings.Current;
         AcceptLicence = s.AcceptLicenceAgreement;
