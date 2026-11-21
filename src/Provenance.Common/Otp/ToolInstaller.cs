@@ -14,8 +14,9 @@ public static class ToolInstaller
 {
     private const string OnePasswordVersionUrl = "https://app-updates.agilebits.com/check/1/0/CLI2/en/2.0.0/N";
     private const string BitwardenDownloadUrl = "https://vault.bitwarden.com/download/?app=cli&platform=windows";
+    // bw-windows till 2026.10, bw-bit-windows since
     private static readonly Regex BitwardenZip =
-        new(@"^https://github\.com/bitwarden/clients/releases/download/cli-v([0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6})/bw-windows-\1\.zip$");
+        new(@"^https://github\.com/bitwarden/clients/releases/download/cli-v([0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6})/bw-(?:[a-z0-9]{1,16}-)?windows-\1\.zip$");
 
     internal static long MaxZip = 200L << 20, MaxExe = 500L << 20;
     internal static TimeSpan StallLimit = TimeSpan.FromSeconds(30);
