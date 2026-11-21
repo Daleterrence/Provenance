@@ -40,6 +40,16 @@ public static class HookFiles
     // the hook prints the friend online and offline lines unless this file's there
     public static void SetGameFriendLines(bool on) => SetSwitchFile(HookContract.Files.NoFriendLines, on, "the friend lines in the game");
 
+    // and the lines for a friend starting or stopping FFXI unless this one is
+    public static void SetGamePlayingLines(bool on) => SetSwitchFile(HookContract.Files.NoPlayingLines, on, "the playing lines in the game");
+
+    public static void WriteShared(string name, string text)
+    {
+        if (_dir is null) return;
+        try { AtomicFile.Write(Path.Combine(RequiredDir, name), text); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Log.Warning(e, "Could not write {Name} for the hook", name); }
+    }
+
     private static void SetSwitchFile(string name, bool on, string what)
     {
         if (_dir is null) return;

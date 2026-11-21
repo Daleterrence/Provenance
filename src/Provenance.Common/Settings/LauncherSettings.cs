@@ -48,6 +48,7 @@ public sealed class LauncherSettings
     public bool GroupChatFlash { get; set; } = true;
     public bool GameMessageSound { get; set; } = true;
     public bool GameFriendLines { get; set; } = true;
+    public bool GamePlayingLines { get; set; } = true;
 
     public bool ShowTimestamps { get; set; } = true;
 

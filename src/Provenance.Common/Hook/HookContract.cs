@@ -114,6 +114,8 @@ public static class HookContract
         public const string PidFile = "provenance.{0}.pid";
         public const string Quiet = "provenance.quiet";
         public const string NoFriendLines = "provenance.nofriendlines";
+        public const string NoPlayingLines = "provenance.noplayinglines";
+        public const string Characters = "provenance.characters";
         public const string PlayEvent = "provenance_play.{0}";
     }
 

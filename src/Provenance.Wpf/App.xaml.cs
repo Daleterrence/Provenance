@@ -135,6 +135,7 @@ public partial class App : Application
             settings = new SettingsService(SettingsService.DefaultPath, uiThread);
             HookFiles.SetGameSound(settings.Current.GameMessageSound);
             HookFiles.SetGameFriendLines(settings.Current.GameFriendLines);
+            HookFiles.SetGamePlayingLines(settings.Current.GamePlayingLines);
             pol = _pol = new PolSession(settings);
             return true;
         }

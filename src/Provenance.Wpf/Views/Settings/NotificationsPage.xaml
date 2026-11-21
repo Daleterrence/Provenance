@@ -43,6 +43,10 @@
                                             Tag="Shown as a line in the chat log.">
                         <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding GameFriendLines}" AutomationProperties.Name="Friend online and offline lines in the game" />
                     </HeaderedContentControl>
+                    <HeaderedContentControl Header="Friends playing FINAL FANTASY XI"
+                                            Tag="A chat log line when they start or stop.">
+                        <ToggleButton Style="{StaticResource Switch}" IsChecked="{Binding GamePlayingLines}" AutomationProperties.Name="Friend playing lines in the game" />
+                    </HeaderedContentControl>
                 </StackPanel>
             </Border>
         </StackPanel>

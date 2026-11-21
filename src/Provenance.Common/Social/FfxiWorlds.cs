@@ -11,4 +11,6 @@ public static class FfxiWorlds
     ];
 
     public static string? Name(int id) => id is >= 98 and <= 131 ? Names[id - 98] : null;
+
+    public static IEnumerable<(int Id, string Name)> All => Names.Select((name, i) => (i + 98, name));
 }
