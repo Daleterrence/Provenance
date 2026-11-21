@@ -1,13 +1,13 @@
 enum { LB_NAME = 16, LB_ENTRIES = 16, LB_STRIDE = 0xb0, LB_PICK_MS = 10000, LB_LIST_MS = 5000, LB_SETTLE_MS = 500, LB_REPICK_MS = 500,
-       LB_PICK_TRIES = 4 };
-enum { LB_NONE, LB_LICENCE, LB_LOBBY, LB_LIST, LB_CONFIRM };
-enum { LB_PICKING, LB_AWAIT_CONFIRM, LB_FINISHED };
+       LB_PICK_TRIES = 4, LB_ERROR_MS = 3000, LB_WORLD_MS = 120000, LB_RETRIES = 2 };
+enum { LB_NONE, LB_LICENCE, LB_LOBBY, LB_LIST, LB_CONFIRM, LB_OK };
+enum { LB_PICKING, LB_AWAIT_CONFIRM, LB_AWAIT_WORLD, LB_FINISHED };
 
 static struct {
-    int licence, picking, stage, answered, tried, picks;
+    int licence, picking, stage, answered, tried, picks, retries;
     int licence_off, picking_off;
     char name[LB_NAME], world[LB_NAME];
-    ULONGLONG started_at, next_look, picked_at, list_at;
+    ULONGLONG started_at, next_look, picked_at, list_at, confirmed_at, error_at;
 } g_lb;
 
 static const int g_lb_licence_needs[] = { AT_FX_MENU_FRONT, AT_FX_LICENCE_MENU };
@@ -106,10 +106,11 @@ static int lb_looked(void)
 
 static int lb_kind(const char *name)
 {
-    static const char names[][17] = { "menu    ptc8lice", "menu    loby2win", "menu    dbnamese", "menu    ptc6yesn" };
-    static const int kinds[] = { LB_LICENCE, LB_LOBBY, LB_LIST, LB_CONFIRM };
+    static const char names[][17] = { "menu    ptc8lice", "menu    loby2win", "menu    dbnamese", "menu    ptc6yesn",
+                                      "menu    ok      " };
+    static const int kinds[] = { LB_LICENCE, LB_LOBBY, LB_LIST, LB_CONFIRM, LB_OK };
     int i;
-    for (i = 0; i < 4; i++)
+    for (i = 0; i < 5; i++)
         if (!memcmp(name, names[i], 16)) return kinds[i];
     return LB_NONE;
 }
@@ -192,6 +193,39 @@ static void lb_finish(const char *why)
     base_log("lobby: %s, the character pick is over for this game\r\n", why);
 }
 
+static int lb_says_3101(const BYTE *box)
+{
+    static const char code[] = "FFXI-3101";
+    const char *text = *(const char *const *)(box + 0x24c);
+    int len = *(const int *)(box + 0x250), i;
+    if (!text || len < (int)sizeof code - 1 || len > 0x400) return 0;
+    for (i = 0; i + (int)sizeof code - 1 <= len; i++)
+        if (!memcmp(text + i, code, sizeof code - 1)) return 1;
+    return 0;
+}
+
+/* 3101 comes and goes and the next go usually gets in, so its box is OK'd after a few seconds. Any other error is the player's */
+static int lb_error(ULONGLONG now)
+{
+    BYTE *m = lb_menu(AT_FX_OK_MENU);
+    if (!m) return 0;
+    if (!g_lb.error_at) {
+        if (g_lb.retries >= LB_RETRIES || !lb_says_3101(m)) {
+            lb_finish("the game gave an error");
+            return 1;
+        }
+        g_lb.error_at = now;
+    }
+    if (now - g_lb.error_at < LB_ERROR_MS) return 0;
+    *(int *)(m + 0x25c) = 1;
+    g_lb.retries++;
+    g_lb.stage = LB_PICKING;
+    g_lb.picks = 0;
+    g_lb.error_at = 0;
+    base_log("lobby: FFXI-3101 at the login, trying the character again (%d of %d)\r\n", g_lb.retries, LB_RETRIES);
+    return 1;
+}
+
 /* 1 when the menu was answered */
 static int lb_answer(int kind, ULONGLONG now)
 {
@@ -205,7 +239,7 @@ static int lb_answer(int kind, ULONGLONG now)
     }
     if (!lb_picking_on()) return 0;
     if (kind == LB_LOBBY || kind == LB_LIST) {
-        if (g_lb.stage == LB_AWAIT_CONFIRM) {
+        if (g_lb.stage != LB_PICKING) {
             lb_finish("the player went back");
             return 0;
         }
@@ -219,10 +253,18 @@ static int lb_answer(int kind, ULONGLONG now)
         if (!(m = lb_menu(AT_FX_CONFIRM_MENU))) return 0;
         *(int *)(m + 0x14) = 0;
         *(int *)(m + 0x30) = 1;
-        g_lb.stage = LB_FINISHED;
-        base_log("lobby: answered the confirm box, the character pick is over for this game\r\n");
+        if (pc_addr_found(AT_FX_OK_MENU)) {
+            g_lb.stage = LB_AWAIT_WORLD;
+            g_lb.confirmed_at = now;
+            g_lb.error_at = 0;
+            base_log("lobby: answered the confirm box\r\n");
+        } else {
+            g_lb.stage = LB_FINISHED;
+            base_log("lobby: answered the confirm box, the character pick is over for this game\r\n");
+        }
         return 1;
     }
+    if (kind == LB_OK && g_lb.stage == LB_AWAIT_WORLD) return lb_error(now);
     return 0;
 }
 
@@ -256,6 +298,8 @@ static void lb_step(void)
     }
     if (lb_picking_on() && g_fx.in_world) lb_finish("the player's in the world");
     if (lb_picking_on() && g_lb.stage == LB_AWAIT_CONFIRM && now - g_lb.picked_at > LB_PICK_MS) lb_finish("no confirm box came");
+    if (lb_picking_on() && g_lb.stage == LB_AWAIT_WORLD && now - g_lb.confirmed_at > LB_WORLD_MS) lb_finish("the login wasn't seen to finish");
+    if (lb_picking_on() && g_lb.stage == LB_AWAIT_WORLD && !lb_menu(AT_FX_CHAR_LIST_MENU)) lb_finish("the lobby's closed");
     if (!lb_licence_on() && !lb_picking_on()) return;
     kind = fx_menu_name(name) ? lb_kind(name) : LB_NONE;
     if (kind == LB_LIST && lb_picking_on() && lb_pick_lost(now)) {
