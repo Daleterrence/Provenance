@@ -7,6 +7,7 @@ native/bin/
 .vs/
 .vscode/
 *.log
-# CI checks the assets repo out here
+# tools\get-assets.ps1 downloads the images here
 /assets/
+/assets.*/
 *_wpftmp.csproj

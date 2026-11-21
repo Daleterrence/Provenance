@@ -40,6 +40,9 @@
     <ProvenanceAssetsDir Condition="'$(ProvenanceAssetsDir)' == ''">$(PROVENANCE_ASSETS)</ProvenanceAssetsDir>
     <ProvenanceAssetsDir Condition="'$(ProvenanceAssetsDir)' == '' and Exists('$(MSBuildThisFileDirectory)..\assets\app\provenance.ico')">$(MSBuildThisFileDirectory)..\assets</ProvenanceAssetsDir>
     <ProvenanceAssetsDir Condition="'$(ProvenanceAssetsDir)' == '' and Exists('$(MSBuildThisFileDirectory)..\..\assets\app\provenance.ico')">$(MSBuildThisFileDirectory)..\..\assets</ProvenanceAssetsDir>
+    <!-- where tools\get-assets.ps1 puts them -->
+    <ProvenanceAssetsDir Condition="'$(ProvenanceAssetsDir)' == '' and Exists('$(MSBuildThisFileDirectory)assets\app\provenance.ico')">$(MSBuildThisFileDirectory)assets</ProvenanceAssetsDir>
+    <ProvenanceAssetsPin>$(MSBuildThisFileDirectory)tools\assets.json</ProvenanceAssetsPin>
     <ProvenanceAssetsDir Condition="'$(ProvenanceAssetsDir)' != ''">$([System.IO.Path]::GetFullPath('$(ProvenanceAssetsDir)'))</ProvenanceAssetsDir>
   </PropertyGroup>
 

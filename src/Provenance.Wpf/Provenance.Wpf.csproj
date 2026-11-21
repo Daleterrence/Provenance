@@ -62,7 +62,13 @@
 
   <Target Name="RequireAssets" BeforeTargets="BeforeBuild">
     <Error Condition="'$(ProvenanceAssetsDir)' == '' or !Exists('$(ProvenanceAssetsDir)\app\provenance.ico')"
-           Text="Provenance's images aren't in this repo. Put the assets folder next to the repo, or set PROVENANCE_ASSETS to where it is." />
+           Text="Provenance's images aren't here. Run tools\get-assets.ps1 to download them, or set PROVENANCE_ASSETS to a folder that has them." />
+    <PropertyGroup Condition="Exists('$(ProvenanceAssetsDir)\.fetched')">
+      <FetchedAssets>$([System.IO.File]::ReadAllText('$(ProvenanceAssetsDir)\.fetched').Trim())</FetchedAssets>
+      <PinnedAssets>$([System.Text.RegularExpressions.Regex]::Replace($([System.IO.File]::ReadAllText('$(ProvenanceAssetsPin)')), '(?s).*sha256\W{1,6}([0-9a-f]{64}).*', '$1'))</PinnedAssets>
+    </PropertyGroup>
+    <Error Condition="Exists('$(ProvenanceAssetsDir)\.fetched') and '$(FetchedAssets)' != '$(PinnedAssets)'"
+           Text="The images in $(ProvenanceAssetsDir) are another commit's. Run tools\get-assets.ps1 to download this one's." />
   </Target>
 
   <Target Name="RequireNatives" BeforeTargets="BeforeBuild">

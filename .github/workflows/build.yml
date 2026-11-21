@@ -21,7 +21,7 @@ env:
   VELOPACK_VERSION: '1.2.161'
 
 jobs:
-  # a fork has no assets key or R2 secrets, so neither job runs there
+  # releases come from this repository, and a fork has no R2 secrets, so neither job runs there
   build:
     if: github.repository == 'Daleterrence/Provenance' && github.event_name != 'release' && !inputs.tag
     runs-on: windows-latest
@@ -33,14 +33,6 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          persist-credentials: false
-
-      # the icon, logo and background aren't in this repo, so they get checked out separately
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          repository: Daleterrence/Provenance-assets
-          ssh-key: ${{ secrets.ASSETS_DEPLOY_KEY }}
-          path: assets
           persist-credentials: false
 
       - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
@@ -57,11 +49,10 @@ jobs:
           }
           dotnet tool install -g vpk --version $env:VELOPACK_VERSION
 
+      # the images aren't in this repo, the pack downloads the ones tools/assets.json names
       - name: Pack
         id: pack
         shell: pwsh
-        env:
-          PROVENANCE_ASSETS: ${{ github.workspace }}\assets
         run: |
           . ./tools/build-common.ps1
           $committed = Get-ProvenanceVersion

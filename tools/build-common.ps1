@@ -26,8 +26,14 @@ function Get-ProvenanceVersion {
 
 function Find-ProvenanceAssets {
     $found = (Get-BuildValues).Properties.ProvenanceAssetsDir
+    $own = Join-Path (Split-Path -Parent $PSScriptRoot) 'assets'
+    if (-not $found -or $found.TrimEnd('\') -eq $own) {
+        & (Join-Path $PSScriptRoot 'get-assets.ps1')
+        $BuildValues.Clear()
+        $found = (Get-BuildValues).Properties.ProvenanceAssetsDir
+    }
     if (-not $found -or -not (Test-Path -LiteralPath (Join-Path $found 'app\provenance.ico'))) {
-        throw "Provenance's images aren't in this repo. Put the assets folder next to the repo, or set PROVENANCE_ASSETS to where it is."
+        throw "Provenance's images aren't here. Run tools\get-assets.ps1 to download them, or set PROVENANCE_ASSETS to a folder that has them."
     }
     $found
 }

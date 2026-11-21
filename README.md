@@ -20,6 +20,15 @@ Have a look at the [FAQ](https://provenancexi.app/faq), or join the [Discord ser
 
 Found a bug? Open an [issue](https://github.com/Daleterrence/Provenance/issues).
 
+## Building it yourself
+
+You'll need the .NET 10 SDK, PowerShell 7, and the Visual Studio Build Tools with the C++ x86/x64 tools.
+
+1. Run `pwsh native/build-native.ps1`. It builds the native parts, and downloads Provenance's images the first time (about 7 MB), as they aren't in this repository.
+2. Run `dotnet build src/Provenance.Wpf`.
+
+The app is 32-bit, so running your build also needs the x86 .NET 10 Desktop Runtime.
+
 ## Licence
 
 Provenance is licensed under the GNU General Public License v3.0, see [LICENSE](LICENSE). The open source software it
