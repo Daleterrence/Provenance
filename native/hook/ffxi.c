@@ -11,8 +11,9 @@ enum { FX_CMD_FR = FX_CMD_RM + 1, FX_WAITING = 16, FX_ANSWER_MS = 30000 };
 enum { FX_ANS_NONE, FX_ANS_WANTED, FX_ANS_RUNNING };
 enum { FX_REQ_NO, FX_REQ_NEW, FX_REQ_DONE, FX_REQ_KEPT };
 
-/* 0x1f and a chat mode gives the rest of the line that mode's colour. 0xdb's is blue, 0x7b's the red of the game's own refusals */
-static const char g_fx_blue[] = "\x1f\xdb", g_fx_red[] = "\x1f\x7b";
+/* 0x1e and a number colours what follows and lasts past a wrap. 0x1f and a chat mode's colour stops at the first one */
+static const char g_fx_blue[] = "\x1e\x70", g_fx_red[] = "\x1e\x44", g_fx_name[] = "\x1e\x45", g_fx_on[] = "\x1e\x02",
+                  g_fx_off[] = "\x1e\x09", g_fx_note[] = "\x1e\x06";
 static const char g_fx_not_sent[] = "This message was not sent. Please try again.";
 static const char g_fx_no_friend[] = " wasn't found on your friend list, check the spelling and try again.";
 static const char g_fx_no_reply[] = "Nobody has sent you a message yet to reply to.";
@@ -175,17 +176,17 @@ static int fx_print(const char *colour, const char *a, const char *b, const char
 
 static int fx_print_line(fx_line *l)
 {
-    static char text[FX_TEXT], name[FX_NAME + 4];
+    static char text[FX_TEXT], name[FX_NAME + 8];
     lstrcpynA(text, l->text, sizeof text);
     if (l->kind == FX_BOUNCE) {
         if (!fx_print(g_fx_red, g_fx_not_sent, "", "")) return 0;
     } else if (l->kind == FX_NOTE || l->kind == FX_FRIEND) {
-        if (!fx_print(g_fx_blue, text, "", "")) return 0;
+        if (!fx_print("", text, "", "")) return 0;
     } else {
         g_fx_step = "word filter";
         if (pc_addr_found(AT_FX_WORD_FILTER)) ((fx_filter_fn)pc_addr_of(g_fx.base, AT_FX_WORD_FILTER))(text);
         g_fx_step = "";
-        wsprintfA(name, "[%s] ", l->name);
+        wsprintfA(name, "[%s%s%s] ", g_fx_name, l->name, g_fx_blue);
         if (!fx_print(g_fx_blue, name, ">> ", text)) return 0;
         g_fx.last_lo = MAIL(l->hdr)->from_lo;
         g_fx.last_hi = MAIL(l->hdr)->from_hi;
@@ -506,7 +507,7 @@ static void fx_answer_pump(BYTE *b)
         if (!code) {
             fx_req_drop(&g_fx.want);
             base_log("ffxi: a friend request was %s\r\n", g_fx.want_yes ? "accepted" : "declined");
-            fx_answer_say(g_fx_blue, g_fx.want_yes ? "You accepted the friend request." : "You declined the friend request.");
+            fx_answer_say(g_fx_note, g_fx.want_yes ? "You accepted the friend request." : "You declined the friend request.");
         } else {
             base_log("ffxi: a friend request answer failed (%d)\r\n", code);
             fx_answer_say(g_fx_red, g_fx_not_answered);
@@ -521,7 +522,7 @@ static void fx_answer_pump(BYTE *b)
 static void fx_command(BYTE *b)
 {
     static char line[FX_LINE_IN + 1], plain[FX_PLAIN];
-    char *who, *raw, name[FX_NAME + 4];
+    char *who, *raw, name[FX_NAME + 8];
     fx_send *s;
     int kind;
     lstrcpynA(line, (const char *)pc_addr_of(g_fx.base, AT_FX_EXPANDED), sizeof line);
@@ -560,7 +561,7 @@ static void fx_command(BYTE *b)
         return;
     }
     g_fx.nsends++;
-    wsprintfA(name, "[%s] ", s->name);
+    wsprintfA(name, "[%s%s%s] ", g_fx_name, s->name, g_fx_blue);
     fx_print(g_fx_blue, ">> ", name, s->text);
 }
 
@@ -1072,7 +1073,9 @@ static void fx_friend_lines(void)
         if (!now[i].changed || !fx_friend_room()) continue;
         fx_clean((const BYTE *)g_ig.written.friends[now[i].row].name, 16, name, sizeof name);
         if (!name[0]) continue;
-        lstrcpynA(text, name, sizeof text);
+        lstrcpyA(text, g_fx_name);
+        fx_append(text, sizeof text, name);
+        fx_append(text, sizeof text, now[i].on ? g_fx_on : g_fx_off);
         fx_append(text, sizeof text, now[i].on ? " has come online." : " has gone offline.");
         fx_queue(FX_FRIEND, name, text, NULL, NULL, 0);
     }
@@ -1097,18 +1100,20 @@ static int fx_take(const char *name, const BYTE *hdr)
     /* a friend request, or the news that one was accepted, stays in r\b and just gets a line. Anything about groups gets none */
     if (kind == 1 || kind == 9) {
         fx_sender(hdr, who);
-        if (kind == 9) {
-            lstrcpynA(text, who, sizeof text);
-            fx_append(text, sizeof text, " accepted your friend request.");
-        } else if (fx_answers() && who[0]) {
-            lstrcpyA(text, "You've received a friend request from ");
+        if (kind == 1 && fx_answers() && who[0]) {
+            lstrcpyA(text, g_fx_note);
+            fx_append(text, sizeof text, "You've received a friend request from ");
+            fx_append(text, sizeof text, g_fx_name);
             fx_append(text, sizeof text, who);
+            fx_append(text, sizeof text, g_fx_note);
             fx_append(text, sizeof text, ". Respond with /fr ");
             fx_append(text, sizeof text, who);
             fx_append(text, sizeof text, " yes/no.");
         } else {
-            lstrcpynA(text, who, sizeof text);
-            fx_append(text, sizeof text, " sent you a friend request.");
+            lstrcpyA(text, g_fx_name);
+            fx_append(text, sizeof text, who);
+            fx_append(text, sizeof text, g_fx_note);
+            fx_append(text, sizeof text, kind == 9 ? " accepted your friend request." : " sent you a friend request.");
         }
         return fx_queue(FX_NOTE, who, text, NULL, NULL, 0) ? 1 : 2;
     }
