@@ -37,7 +37,8 @@ public interface IWindowManager
     void AddFriend(SocialViewModel social, string? handleName = null, string? handleKey = null);
     bool ConfirmDropProfileEditor(string action, bool leaveSaving = false);
     void CloseProfileEditor();
-    void CloseSessionWindows();
+    void CloseSessionWindows(bool keepFriends = false);
+    void CloseFriendsWindows();
     void ShowInstall(InstallViewModel vm);
     void ShowSettings(SettingsViewModel vm, SettingsTab tab);
     void ShowRepair(RepairViewModel vm);
@@ -257,13 +258,18 @@ public sealed class WindowManager(ISettingsService settings, IDialogs dialogs) :
 
     public void CloseProfileEditor() => Find<EditProfileWindow>()?.CloseQuietly();
 
-    public void CloseSessionWindows()
+    public void CloseSessionWindows(bool keepFriends = false)
     {
         CloseProfileEditor();
         Find<ChatRoomsWindow>()?.CloseQuietly();
         Find<GroupChatWindow>()?.CloseQuietly();
         Find<GroupsWindow>()?.Close();
         Find<ProfileWindow>()?.Close();
+        if (!keepFriends) CloseFriendsWindows();
+    }
+
+    public void CloseFriendsWindows()
+    {
         FriendsWindow()?.Close();
         foreach (var w in Application.Current.Windows.OfType<PopOutWindow>().ToList()) w.Close();
     }

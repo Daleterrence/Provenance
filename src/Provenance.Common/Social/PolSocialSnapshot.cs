@@ -16,6 +16,10 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int 
 {
     public HookJob SendJob { get; init; } = HookJob.None;
     public bool FriendsLoaded { get; init; } = true;
+    // "live" while the game runs, "off" once the sampler's stopped for good, "" from the hold
+    public string Sampler { get; init; } = "";
+    public int Beat { get; init; }
+    public bool GameFriends { get; init; }
     public bool Lean { get; init; }
     public string Mail { get; init; } = "";
     public bool StatusBusy { get; init; }

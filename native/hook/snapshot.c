@@ -4,7 +4,8 @@ enum { SNAPSHOT_NAME_CAP = 64, SNAPSHOT_STATE_CAP = 110, SNAPSHOT_GROUP_CAP = 96
 static char *g_snap_kept;
 static int g_snap_kept_n;
 static char g_snap_kept_path[MAX_PATH + 64];
-static void snapshot_write(const jw *w)
+/* 0 when the file couldn't be put in place */
+static int snapshot_write(const jw *w)
 {
     char path[MAX_PATH + 64];
     DWORD a;
@@ -13,17 +14,84 @@ static void snapshot_write(const jw *w)
     a = GetFileAttributesA(path);
     if (g_snap_kept && g_snap_kept_n == w->n && !lstrcmpA(g_snap_kept_path, path) && memcmp(g_snap_kept, w->p, (size_t)w->n) == 0 &&
         a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY))
-        return;
+        return 1;
     if (g_snap_kept) HeapFree(GetProcessHeap(), 0, g_snap_kept);
     g_snap_kept = NULL;
     g_snap_kept_n = 0;
-    if (!base_ipc_json_open(IPC_SOCIAL, &file)) return;
-    if (!base_ipc_json_commit(&file, base_ipc_json_write(&file, w->p, w->n))) return;
+    if (!base_ipc_json_open(IPC_SOCIAL, &file)) return 0;
+    if (!base_ipc_json_commit(&file, base_ipc_json_write(&file, w->p, w->n))) return 0;
     g_snap_kept = (char *)HeapAlloc(GetProcessHeap(), 0, (SIZE_T)w->n + 1);
-    if (!g_snap_kept) return;
+    if (!g_snap_kept) return 1;
     memcpy(g_snap_kept, w->p, (size_t)w->n);
     g_snap_kept_n = w->n;
     lstrcpyA(g_snap_kept_path, path);
+    return 1;
+}
+
+static int ingame_can(BYTE *b);
+
+static const char *snapshot_status_name(int st)
+{
+    return st == 0 ? "online" : st == 1 ? "away" : st == 2 ? "busy" : "appear-offline";
+}
+
+static void snapshot_blocked(BYTE *b, jw *w, const pol_friend *rows)
+{
+    char sk[17];
+    jw_arr(w, "blocked");
+    for (int bi = 0; bi < 100; bi++) {
+        const pol_friend *a = rows + bi;
+        if (IsBadReadPtr(a, sizeof *a)) break;
+        if (!pc_friend_valid(a)) continue;
+        peers_friend_key(b, a, sk);
+        jw_obj(w, NULL);
+        jw_int(w, "index", bi);
+        jw_sjis(w, "name", b, (const BYTE *)a->name, 0x0f, SNAPSHOT_NAME_CAP);
+        jw_lit(w, "key", sk);
+        jw_bool(w, "allHandles", a->flags & 3);
+        jw_end(w);
+    }
+    jw_end(w);
+}
+
+/* mine is my POL ID as text, for the row that's me */
+static void snapshot_friends(BYTE *b, jw *w, const pol_friend *rows, const pol_friend_extra *extras, const char *mine)
+{
+    char sk[17];
+    jw_arr(w, "friends");
+    for (int i = 0; i < 200; i++) {
+        const pol_friend *a = rows + i;
+        const pol_friend_extra *bn = extras + i;
+        WCHAR fw[0x33] = {0};
+        char combuf[0x33 * 3 + 1] = {0};
+        DWORD cs, cl, chi;
+        if (IsBadReadPtr(a, sizeof *a) || IsBadReadPtr(bn, sizeof *bn)) break;
+        if (!pc_friend_valid(a)) continue;   /* polcore.dll 0x10024d30 */
+        /* the comment's UTF-16 while the names are SJIS */
+        memcpy(fw, bn->comment, 0x32 * sizeof(WCHAR));
+        WideCharToMultiByte(CP_UTF8, 0, fw, -1, combuf, (int)sizeof combuf - 1, NULL, NULL);
+        peers_friend_key(b, a, sk);
+        jw_obj(w, NULL);
+        jw_int(w, "row", i);
+        jw_lit(w, "key", sk);
+        jw_sjis(w, "name", b, (const BYTE *)a->name, 0x0f, SNAPSHOT_NAME_CAP);
+        jw_str(w, "comment", combuf, 192);
+        jw_lit(w, "status", peers_friend_status(a->flags));
+        jw_bool(w, "online", peers_friend_online(a->flags));
+        jw_bool(w, "pending", a->flags & FRIEND_PENDING);
+        jw_uint(w, "pic", bn->pic);
+        jw_bool(w, "me", peers_is_polid(b, mine, a->id_lo, a->id_hi));
+        if (peers_friend_ffxi(a, &cs, &cl, &chi)) {
+            jw_obj(w, "game");
+            jw_uint(w, "world", (cs >> 16) & 0xff);
+            jw_uint(w, "ctsid", cs);
+            jw_uint(w, "ctidLow", cl);
+            jw_uint(w, "ctidHigh", chi);
+            jw_end(w);
+        }
+        jw_end(w);
+    }
+    jw_end(w);
 }
 
 static void snapshot_social(BYTE *b)
@@ -34,8 +102,7 @@ static void snapshot_social(BYTE *b)
     int i, k, ng, st, held = 0, have_hn = 0;
     unsigned pic = 0;
     unsigned __int64 me;
-    const char *name;
-    char hn[64];
+    char hn[64], mine[64];
     grp_hdr gh;
     grp_mem m;
     jw w = {0};
@@ -48,6 +115,7 @@ static void snapshot_social(BYTE *b)
     jw_lit(&w, "presence", g_presence);
     jw_bool(&w, "friendsLoaded", g_friends_loaded);
     jw_bool(&w, "lean", g_lean);
+    if (ingame_can(b)) jw_bool(&w, "gameFriends", 1);
     jw_lit(&w, "mail", g_mail_state);
     jw_bool(&w, "statusBusy", g_s.status_job >= 0 || g_s.status_want >= 0);
     jw_bool(&w, "badPassword", g_bad_password);
@@ -190,23 +258,9 @@ static void snapshot_social(BYTE *b)
         u8[sizeof u8 - 1] = 0;
         jw_str(&w, "myComment", u8, 0x33 * 6 + 8);
     }
-    jw_arr(&w, "blocked");
-    for (int bi = 0; bi < 100; bi++) {
-        const pol_friend *a = pc_ignore_row(b, bi);
-        if (IsBadReadPtr(a, sizeof *a)) break;
-        if (!pc_friend_valid(a)) continue;
-        peers_friend_key(b, a, sk);
-        jw_obj(&w, NULL);
-        jw_int(&w, "index", bi);
-        jw_sjis(&w, "name", b, (const BYTE *)a->name, 0x0f, SNAPSHOT_NAME_CAP);
-        jw_lit(&w, "key", sk);
-        jw_bool(&w, "allHandles", a->flags & 3);
-        jw_end(&w);
-    }
-    jw_end(&w);
+    snapshot_blocked(b, &w, pc_ignore_row(b, 0));
     st = pc_my_status_or(b, 4);
-    name = st == 0 ? "online" : st == 1 ? "away" : st == 2 ? "busy" : "appear-offline";
-    jw_lit(&w, "myStatus", name);
+    jw_lit(&w, "myStatus", snapshot_status_name(st));
     if (pc_has(b, SV_CURRENT_HANDLE) && pc_has(b, SV_GET_HANDLE)) {
         int slot = pc_current_handle(b);
         pol_handle rec = {0};
@@ -224,39 +278,8 @@ static void snapshot_social(BYTE *b)
     jw_lit(&w, "myKey", sk);
     jw_uint(&w, "myPic", pic);
     handles_json(b, &w);
-    jw_arr(&w, "friends");
-    for (i = 0; i < 200; i++) {
-        const pol_friend *a = pc_friend_row(b, i);
-        const pol_friend_extra *bn = pc_friend_extra(b, i);
-        WCHAR fw[0x33] = {0};
-        char combuf[0x33 * 3 + 1] = {0};
-        DWORD cs, cl, chi;
-        if (IsBadReadPtr(a, sizeof *a) || IsBadReadPtr(bn, sizeof *bn)) break;
-        if (!pc_friend_valid(a)) continue;   /* polcore.dll 0x10024d30 */
-        memcpy(fw, bn->comment, 0x32 * sizeof(WCHAR));
-        WideCharToMultiByte(CP_UTF8, 0, fw, -1, combuf, (int)sizeof combuf - 1, NULL, NULL);
-        peers_friend_key(b, a, sk);
-        jw_obj(&w, NULL);
-        jw_int(&w, "row", i);
-        jw_lit(&w, "key", sk);
-        jw_sjis(&w, "name", b, (const BYTE *)a->name, 0x0f, SNAPSHOT_NAME_CAP);
-        jw_str(&w, "comment", combuf, 192);
-        jw_lit(&w, "status", peers_friend_status(a->flags));
-        jw_bool(&w, "online", peers_friend_online(a->flags));
-        jw_bool(&w, "pending", a->flags & FRIEND_PENDING);
-        jw_uint(&w, "pic", bn->pic);
-        jw_bool(&w, "me", peers_is_me(b, a->id_lo, a->id_hi));
-        if (peers_friend_ffxi(a, &cs, &cl, &chi)) {
-            jw_obj(&w, "game");
-            jw_uint(&w, "world", (cs >> 16) & 0xff);
-            jw_uint(&w, "ctsid", cs);
-            jw_uint(&w, "ctidLow", cl);
-            jw_uint(&w, "ctidHigh", chi);
-            jw_end(&w);
-        }
-        jw_end(&w);
-    }
-    jw_end(&w);
+    peers_polid_text(b, me, mine);
+    snapshot_friends(b, &w, pc_friend_row(b, 0), pc_friend_extra(b, 0), mine);
     jw_arr(&w, "messages");
     for (i = mail_inbox_next(0, 0xf | 1 << 7); i >= 0; i = mail_inbox_next(g_mail[i].mid, 0xf | 1 << 7)) {
         const mailrec *ml = &g_mail[i];

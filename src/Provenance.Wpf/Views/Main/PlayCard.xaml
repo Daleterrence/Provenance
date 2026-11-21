@@ -4,7 +4,7 @@
              xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
              xmlns:socialViews="clr-namespace:Provenance.Wpf.Views.Social">
     <Grid Margin="14,14,14,18" RowDefinitions="*,Auto">
-        <DockPanel IsEnabled="{Binding GameOpen, Converter={StaticResource InvertBool}}" Style="{StaticResource DimWhenOff}">
+        <DockPanel IsEnabled="{Binding FriendsLocked, Converter={StaticResource InvertBool}}" Style="{StaticResource DimWhenOff}">
             <TextBlock DockPanel.Dock="Top" Margin="8,0,4,8" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis">
                 <Run Text="Friends" /><Run Text="   " /><Run Text="{Binding Social.Summary, Mode=OneWay}" FontSize="12" FontWeight="Normal" Foreground="{DynamicResource Text.3}" />
             </TextBlock>

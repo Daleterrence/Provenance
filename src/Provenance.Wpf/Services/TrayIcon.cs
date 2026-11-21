@@ -8,7 +8,7 @@ using Serilog;
 
 namespace Provenance.Wpf.Services;
 
-internal enum TrayState { LoggedOut, LoggedIn, GameOpen }
+internal enum TrayState { LoggedOut, LoggedIn, GameOpen, GameOpenWithFriends }
 
 public sealed class TrayIcon : IDisposable
 {
@@ -96,12 +96,13 @@ public sealed class TrayIcon : IDisposable
     internal void SetState(TrayState state)
     {
         bool loggedIn = state == TrayState.LoggedIn;
-        _friends.Visible = _signOut.Visible = loggedIn;
+        _signOut.Visible = loggedIn;
+        _friends.Visible = loggedIn || state == TrayState.GameOpenWithFriends;
         _exit.Text = loggedIn ? "Exit and log out" : "Exit";
         _icon.Text = state switch
         {
             TrayState.LoggedIn => "Provenance (logged in to PlayOnline)",
-            TrayState.GameOpen => "Provenance (FINAL FANTASY XI is open)",
+            TrayState.GameOpen or TrayState.GameOpenWithFriends => "Provenance (FINAL FANTASY XI is open)",
             _ => "Provenance",
         };
     }

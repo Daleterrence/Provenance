@@ -45,6 +45,7 @@ enum hook_address {
     AT_HANDLES,
     AT_STATUS_ANSWERS,      /* a pointer for each job 0-3, POLCORE_STATUS_STRIDE apart: LOAD_MY_STATUS's answer */
     AT_GCHAT_LINE_HELD,
+    AT_POLL_CALLBACK,
     ADDRESS_COUNT
 };
 
@@ -135,6 +136,7 @@ static void *pc_dic_relocate(BYTE *b, void *dic, int size)
 PC_SVC3(int, pc_dic_has_word, SV_DIC_HAS_WORD, void *, dic, const WCHAR *, name, int, len)
 #define SV_MY_ID           0x558
 PC_SVC0(unsigned __int64, pc_my_id, SV_MY_ID)
+static unsigned __int64 pc_my_id_or(BYTE *b, unsigned __int64 none) { return pc_has(b, SV_MY_ID) ? pc_my_id(b) : none; }
 #define SV_FORMAT_POLID            0x584
 PC_SVC3_V(void, pc_format_polid, SV_FORMAT_POLID, unsigned, lo, unsigned, hi, char *, out)
 #define SV_FORMAT_HID              0x76c
@@ -144,6 +146,8 @@ PC_SVC2(int, pc_mail_address_ok, SV_MAIL_ADDRESS_OK, const char *, sjis, int, le
 #define SV_MY_STATUS       0x338
 PC_SVC0(int, pc_my_status, SV_MY_STATUS)
 static int pc_my_status_or(BYTE *b, int none) { return pc_has(b, SV_MY_STATUS) ? pc_my_status(b) : none; }
+#define SV_GAME_TAG        0x2f4   /* the game slot polcore has for me, 0 or more in the world and -1 outside it */
+PC_SVC0(int, pc_game_tag, SV_GAME_TAG)
 #define SV_CURRENT_HANDLE  0x2f8
 PC_SVC0(int, pc_current_handle, SV_CURRENT_HANDLE)
 static int pc_current_handle_or(BYTE *b, int none) { return pc_has(b, SV_CURRENT_HANDLE) ? pc_current_handle(b) : none; }

@@ -290,13 +290,98 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     }
 
     public bool GameRunning => _session.GameRunning;
-    public const string GameRunningNote = "That has to wait till FINAL FANTASY XI is closed.";
+    public const string GameRunningNote = "That isn't available while you're in the game.";
+    public const string GameLine =
+        "While you're in the game you can read your friends and messages here. Sending messages, changing your status or friends " +
+        "list and answering requests aren't available until you close the game.";
 
     private LastRaised _gameRunningShown;
+
+    // the hook's friends sampler is running and its snapshots are coming in, so the list is up to date in the game
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(GameLineText))] private bool _gameFeedLive;
+    private bool _gameFeedExpected;
+    private DateTime _gameBegan, _gameFeedAt;
+    // the hook's first snapshot comes after its Play writes are done, then one every few seconds whether or not anything changed
+    internal static readonly TimeSpan GameFeedGrace = TimeSpan.FromSeconds(45);
+    internal static readonly TimeSpan GameFeedStale = TimeSpan.FromSeconds(20);
+    // the feed was there, or the hold said it would be, and now it's stopped or never came
+    public event Action? GameFeedLost;
+    public string? GameLineText => GameRunning && GameFeedLive ? GameLine : null;
+    public bool CanOpenEditor => LoggedIn && !GameRunning;
+
+    // the game's starting. expected is what the hold's last snapshot said about the sampler
+    internal void GameBegan(bool expected)
+    {
+        _gameFeedExpected = expected;
+        _gameBegan = Now;
+        GameFeedLive = false;
+    }
+
+    internal void GameEnded()
+    {
+        _gameFeedExpected = false;
+        GameFeedLive = false;
+    }
+
+    private void LoseGameFeed()
+    {
+        bool had = GameFeedLive || _gameFeedExpected;
+        _gameFeedExpected = false;
+        GameFeedLive = false;
+        if (had) GameFeedLost?.Invoke();
+    }
+
+    // on the main window's timer: a feed that's gone quiet, or one that never started, is a lost one
+    internal void CheckGameFeed()
+    {
+        if (!GameRunning) return;
+        if (GameFeedLive ? Now - _gameFeedAt > GameFeedStale : _gameFeedExpected && Now - _gameBegan > GameFeedGrace) LoseGameFeed();
+    }
+
+    // what the sampler sends while the game runs: the friends, who's ignored and my status. Everything else stays as the last
+    // snapshot from the hold had it, as nothing else can change in the game
+    internal void ApplyGame(PolSocialSnapshot snap)
+    {
+        if (!GameRunning) return;
+        if (snap.Sampler == "off")
+        {
+            LoseGameFeed();
+            return;
+        }
+        if (snap.Sampler != "live" || !snap.FriendsLoaded) return;
+        _gameFeedAt = Now;
+        _applyingSnapshot = true;
+        try
+        {
+            var merged = _login.Last with { Friends = snap.Friends, MyStatus = snap.MyStatus, Blocked = snap.Blocked };
+            _login.Last = merged;
+            ZoneSearch?.Tick(merged.Friends);
+            Lookups.Seen(merged.Friends);
+            RebuildFriends(merged);
+            OnlineCount = merged.Friends.Count(f => f.Online && !f.Pending);
+            MyStatusIndex = Array.IndexOf(StatusChoices, merged.MyStatus == PolStatus.Busy ? PolStatus.Online : merged.MyStatus);
+            static string BlockedId(PolBlocked x) => $"{x.Index}/{x.Key}/{x.Name}";
+            if (!Blocked.Select(BlockedId).SequenceEqual(merged.Blocked.Select(BlockedId)))
+            {
+                Blocked.Clear();
+                foreach (var x in merged.Blocked) Blocked.Add(x);
+            }
+            HasBlocked = Blocked.Count > 0;
+            RefreshPending();
+            RefreshUnseen();
+            OnPropertyChanged(nameof(Summary));
+            OnPropertyChanged(nameof(NoFriends));
+            OnPropertyChanged(nameof(NoFriendsInList));
+            OnPropertyChanged(nameof(NoRequests));
+        }
+        finally { _applyingSnapshot = false; }
+        GameFeedLive = true;
+    }
 
     private void OnPhaseChanged()
     {
         OnPropertyChanged(nameof(LoggedIn));
+        OnPropertyChanged(nameof(CanOpenEditor));
         OnPropertyChanged(nameof(NotificationCount));
         RefreshZoneTrouble();
         OnPropertyChanged(nameof(NoFriends));
@@ -305,10 +390,13 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         OnPropertyChanged(nameof(NoRequests));
         OnPropertyChanged(nameof(PopShown));
         bool running = _session.GameRunning;
+        if (!running) GameEnded();
         if (_gameRunningShown.Changed(running))
         {
             foreach (var c in Conversations.ToList()) c.StateChanged();
             OnPropertyChanged(nameof(GameRunning));
+            OnPropertyChanged(nameof(GameLineText));
+            OnPropertyChanged(nameof(CanOpenEditor));
             OnPropertyChanged(nameof(StatusEditable));
         }
         OnPropertyChanged(nameof(CanGroupChat));
@@ -1054,7 +1142,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     internal void TickZones()
     {
-        if (LoggedIn) ZoneSearch?.Tick(null);
+        if (LoggedIn && (!GameRunning || GameFeedLive)) ZoneSearch?.Tick(null);
         RefreshZoneTrouble();
     }
 
@@ -1151,7 +1239,11 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     public void AnswerWith(FriendItem f, RequestChoice choice)
     {
-        if (!CanEdit) return;
+        if (!CanEdit)
+        {
+            if (WriteBlockedNote is { } blocked) EditNote.Fail(blocked);
+            return;
+        }
         switch (choice)
         {
             case RequestChoice.Accept when f.IsGroupInvite: Groups.AnswerInvite(f, true); break;

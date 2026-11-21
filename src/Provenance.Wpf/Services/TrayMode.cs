@@ -22,7 +22,7 @@ internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp
     public event Action? BackFromTray;
 
     private static TrayState StateOf(MainViewModel vm) =>
-        vm.Session.Phase == SessionPhase.InGame ? TrayState.GameOpen
+        vm.Session.Phase == SessionPhase.InGame ? (vm.Social.GameFeedLive ? TrayState.GameOpenWithFriends : TrayState.GameOpen)
         : vm.LoggedIn ? TrayState.LoggedIn
         : TrayState.LoggedOut;
 
@@ -49,7 +49,9 @@ internal sealed class TrayMode(Window window, Action exit, Func<bool> questionUp
             }
             void FollowCount(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
             {
-                if (InTray && e.PropertyName == nameof(ViewModels.Social.SocialViewModel.NotificationCount)) Icon?.SetBadge(vm.Social.NotificationCount);
+                if (!InTray) return;
+                if (e.PropertyName == nameof(ViewModels.Social.SocialViewModel.NotificationCount)) Icon?.SetBadge(vm.Social.NotificationCount);
+                else if (e.PropertyName == nameof(ViewModels.Social.SocialViewModel.GameFeedLive)) Icon?.SetState(StateOf(vm));
             }
             vm.Session.PhaseChanged += Follow;
             vm.Social.PropertyChanged += FollowCount;

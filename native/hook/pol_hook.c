@@ -37,12 +37,14 @@
 #include "handles.c"
 #include "handle_edits.c"
 #include "snapshot.c"
+#include "ingame.c"
 #include "hold.c"
 
 /* add-ons and game plugins are already unloaded in FFXI's exit. Ashita hooks ExitProcess to unload its POL plugins
    and finish its log, so it gets a clean one */
 NORETURN static void pol_hook_game_over(UINT code)
 {
+    ingame_stop();
     if (GetModuleHandleW(L"Ashita.dll")) {
         base_saver_restore();
         ExitProcess(code);

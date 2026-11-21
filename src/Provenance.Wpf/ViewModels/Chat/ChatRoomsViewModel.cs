@@ -18,7 +18,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     public enum Page { Lobby, Room }
 
     public const string CouldNotGetName = "Could not retrieve chat name.";
-    public const string GameRunningText = "Chat rooms have to wait till FINAL FANTASY XI is closed.";
+    public const string GameRunningText = "Chat rooms aren't available while you're in the game.";
     public const string LeaveQuestion = "Leave chat room?";
     public const string LeaveAsMaster =
         "Another member will be automatically designated room master if you leave the chat room now. Leave the room?";

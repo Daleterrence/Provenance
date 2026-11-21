@@ -48,7 +48,7 @@ public sealed partial class SocialMessages : ObservableObject
     public string ComposeNote => Friend switch
     {
         null => "",
-        _ when _social.GameRunning => "While FINAL FANTASY XI is running, replies go through the game.",
+        _ when _social.GameRunning => "Sending messages isn't available while you're in the game.",
         _ when _social.HandleSwitching => SocialViewModel.SwitchingNote,
         { CanMessage: true } when ComposeCountShown && ComposeHasWide =>
             ShiftJis.HasDoubleByte(Compose) ? "Japanese characters count as two." : "Some characters count as two.",

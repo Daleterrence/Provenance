@@ -117,7 +117,20 @@ public partial class MainViewModel : ObservableObject
         Social = new SocialViewModel(dialogs, windows, _pol, avatars, _settings, Session, Viewer, time);
         Social.OpenChatRequested += OpenChatWith;
         Social.PostToUi = action => _ui.Post(action);
-        _socialPoll.Tick += (_, _) => Social.TickZones();
+        _socialPoll.Tick += (_, _) =>
+        {
+            Social.TickZones();
+            Social.CheckGameFeed();
+        };
+        Social.GameFeedLost += () =>
+        {
+            _windows.CloseFriendsWindows();
+            RaiseGameFriends();
+        };
+        Social.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SocialViewModel.GameFeedLive)) RaiseGameFriends();
+        };
         Accounts.MessagesEnding = Social.StopKeeping;
 
         Multi.RequestShow += () => RequestShow?.Invoke();
@@ -195,12 +208,20 @@ public partial class MainViewModel : ObservableObject
                 break;
             case SessionPhase.InGame:
                 Social.Messages.SettleSends(SessionEnd.Play);
-                _windows.CloseSessionWindows();
+                bool friends = Social.Last.GameFriends;
+                _windows.CloseSessionWindows(keepFriends: friends);
+                Social.GameBegan(friends);
+                _pol.WatchGame();
+                _socialPoll.Start();
                 if (Notice.Current is { Opens: true }) Notice.Take();
                 TrayIcon.Warm();
                 break;
             case SessionPhase.LoggedOut:
-                if (from == SessionPhase.InGame) _windows.CloseSessionWindows();
+                if (from == SessionPhase.InGame)
+                {
+                    _socialPoll.Stop();
+                    _windows.CloseSessionWindows();
+                }
                 _elapsedTimer.Stop();
                 if (from is SessionPhase.MultiRun or SessionPhase.MultiStopping) _ = Repair.ProbeAsync();
                 break;
@@ -235,7 +256,10 @@ public partial class MainViewModel : ObservableObject
             OnPropertyChanged(nameof(ShowLaunchCard));
         }
         if (gameOpenChanged)
+        {
             foreach (var name in new[] { nameof(GameOpen), nameof(PlayText), nameof(PlayName), nameof(PlayEnabled) }) OnPropertyChanged(name);
+            RaiseGameFriends();
+        }
     }
 
     [ObservableProperty] private string _progressText = string.Empty;
@@ -461,6 +485,20 @@ public partial class MainViewModel : ObservableObject
     public bool ShowLaunchCard => IsLaunching && !GameUp;
 
     public bool GameOpen => Session.Phase == SessionPhase.InGame;
+    // the friends list and its window are usable in the game only while the hook's sampler is keeping them up to date
+    public bool FriendsLocked => GameOpen && !Social.GameFeedLive;
+    public const string GameLockedBanner = "You cannot use any PlayOnline or social features of Provenance whilst logged into the game.";
+    public const string GameFriendsBanner =
+        "Your friends list keeps updating whilst you're in the game. Handles, chat rooms, group chat, sending messages, changing your " +
+        "status and answering friend requests or group invitations aren't available until you close the game.";
+    public string GameBanner => Social.GameFeedLive ? GameFriendsBanner : GameLockedBanner;
+
+    private void RaiseGameFriends()
+    {
+        OnPropertyChanged(nameof(FriendsLocked));
+        OnPropertyChanged(nameof(GameBanner));
+    }
+
     public string PlayText => GameOpen ? "GAME OPEN" : "PLAY";
     public string PlayName => GameOpen ? "Game open" : "Play";
     public bool PlayEnabled => Social.CanPlay && !GameOpen && !UpdatingNow;
@@ -584,6 +622,13 @@ public partial class MainViewModel : ObservableObject
             timer?.Lap("wait for the UI thread");
             if (_pol.Pid is null) return;
             if (Multi.Running) { Multi.RunSnapshot = snap; return; }
+            // the sampler's, while the game runs: the friends and my status, and nothing the hold's last one had that can change
+            if (snap.Sampler.Length > 0)
+            {
+                try { Social.ApplyGame(snap); }
+                catch (Exception ex) { Log.Error(ex, "Updating friends in the game failed"); }
+                return;
+            }
             if (Lean.Hold(snap)) return;
             try
             {
@@ -603,7 +648,7 @@ public partial class MainViewModel : ObservableObject
 
     public void OpenChatWith(FriendItem friend)
     {
-        if (Multi.Running || GameOpen) return;
+        if (Multi.Running || FriendsLocked) return;
         Social.OpenConversation(friend);
     }
 
@@ -617,7 +662,7 @@ public partial class MainViewModel : ObservableObject
         }
         if (notice.Request > 0 || notice.Target == NoticeTarget.Friends)
         {
-            if (Multi.Running || GameOpen) return;
+            if (Multi.Running || FriendsLocked) return;
             Social.ShowRequests();
             OpenSocial();
             return;
@@ -630,7 +675,7 @@ public partial class MainViewModel : ObservableObject
 
     internal void OpenSocial()
     {
-        if (Multi.Running || GameOpen) return;
+        if (Multi.Running || FriendsLocked) return;
         _windows.ShowFriends(Social);
     }
 
@@ -643,7 +688,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ToggleFriends()
     {
-        if (Multi.Running || GameOpen) return;
+        if (Multi.Running || FriendsLocked) return;
         if (!_windows.CloseIfShown(SecondWindow.Friends)) OpenSocial();
     }
 

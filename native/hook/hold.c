@@ -381,8 +381,10 @@ static void hold_run(BYTE *b)
                 if (!said) base_log(LOG_PLAY_REFUSED "no-content-id\r\n");
                 said = 1;
             } else {
+                int friends = ingame_ready(b);
                 base_log(LOG_PLAY_STARTED " - finishing PlayOnline writes, then booting FFXI\r\n");
                 hold_play_drain(b, spath, 15000);
+                if (friends) ingame_start(b);
                 if (g_owner) CloseHandle(g_owner);
                 g_owner = NULL;
                 hold_play_event_close();

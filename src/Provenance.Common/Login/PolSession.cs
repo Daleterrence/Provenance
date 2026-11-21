@@ -507,6 +507,12 @@ public sealed partial class PolSession : IDisposable
         return why;
     }
 
+    // the game's up, and with a hook that keeps the friends list going it writes snapshots again
+    public void WatchGame()
+    {
+        if (Volatile.Read(ref _played) && Pid is { } pid) _snapshots.Start(pid);
+    }
+
     public void SignalPlay()
     {
         if (Credentials.LaunchId is null) return;
@@ -573,6 +579,7 @@ public sealed partial class PolSession : IDisposable
 
     public void GameExited()
     {
+        _snapshots.Stop();
         ScreenSaver.PutBack();
         lock (_gate)
         {

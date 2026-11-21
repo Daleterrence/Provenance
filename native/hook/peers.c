@@ -136,15 +136,24 @@ static void peers_key(BYTE *b, unsigned lo, unsigned hi, unsigned slot, char out
     }
     out[16] = 0;
 }
+/* a POL ID as text, empty when it can't be told */
+static void peers_polid_text(BYTE *b, unsigned __int64 id, char out[64])
+{
+    out[0] = 0;
+    if (id && pc_has(b, SV_FORMAT_POLID)) peers_fmt_polid(b, (unsigned)id, (unsigned)(id >> 32), out);
+}
+static int peers_is_polid(BYTE *b, const char *mine, unsigned lo, unsigned hi)
+{
+    char id[64];
+    if (!mine[0]) return 0;
+    peers_fmt_polid(b, lo, hi, id);
+    return lstrcmpA(id, mine) == 0;
+}
 static int peers_is_me(BYTE *b, unsigned lo, unsigned hi)
 {
-    char id[64], mine[64];
-    if (!pc_has(b, SV_FORMAT_POLID)) return 0;
-    unsigned __int64 me = pc_my_id(b);
-    if (!me) return 0;
-    peers_fmt_polid(b, (unsigned)me, (unsigned)(me >> 32), mine);
-    peers_fmt_polid(b, lo, hi, id);
-    return mine[0] && lstrcmpA(id, mine) == 0;
+    char mine[64];
+    peers_polid_text(b, pc_my_id_or(b, 0), mine);
+    return peers_is_polid(b, mine, lo, hi);
 }
 static int peers_get_friend(BYTE *b, int row, pol_friend_copy *fr)
 {
