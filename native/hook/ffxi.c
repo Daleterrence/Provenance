@@ -198,7 +198,7 @@ static int fx_slot_pieces(const BYTE *slot, BYTE **out)
 }
 
 /* a piece: source size and place at +8, flip +0x1c, colours +0x1d, blend +0x2d, picture name +0x32, the picture +0x4c,
-   four vertices of 0x1c from +0x50, corners at +0xc0 and +0xc8 */
+   four vertices of 0x1c from +0x50, corners at +0xc0 and +0xc8. Full is 0x80 for red, green and blue but 0xff for alpha */
 static int fx_icon_cell(const BYTE *p, const fx_icon_def *d)
 {
     const short *at = (const short *)(p + 8);
@@ -217,10 +217,11 @@ static int fx_icon_paint(BYTE *slot, BYTE **pieces, int n, const fx_icon_def *d)
     at[2] = d->u;
     at[3] = d->v;
     first[0x1c] = 0;
-    memset(first + 0x1d, 0x80, 16);
+    memset(first + 0x1d, 0x80, 12);
+    memset(first + 0x29, 0xff, 4);
     memcpy(first + 0x2d, "\x01\x00\x01\x01", 4);
     for (i = 0; i < 4; i++) {
-        *(DWORD *)(first + 0x60 + i * 0x1c) = 0x80808080;
+        *(DWORD *)(first + 0x60 + i * 0x1c) = 0xff808080;
         *(short *)(first + 0xc0 + i * 2) = (i & 1) ? d->qw : 0;
         *(short *)(first + 0xc8 + i * 2) = (i & 2) ? d->qh : 0;
     }
@@ -285,7 +286,6 @@ static int fx_print(int icon, const char *colour, const char *a, const char *b, 
     BYTE mode[4] = { 0x12, 0, 0, 0 };
     if (!fx_can_print()) return 0;
     lstrcpynA(line, fx_icon(icon), sizeof line);
-    if (line[0]) fx_append(line, sizeof line, " ");
     fx_append(line, sizeof line, colour);
     fx_append(line, sizeof line, a);
     fx_append(line, sizeof line, b);
@@ -310,7 +310,7 @@ static int fx_print_line(fx_line *l)
         if (pc_addr_found(AT_FX_WORD_FILTER)) ((fx_filter_fn)pc_addr_of(g_fx.base, AT_FX_WORD_FILTER))(text);
         g_fx_step = "";
         wsprintfA(name, "[%s%s%s%s] ", l->away ? fx_icon(FX_ICON_AWAY) : "", g_fx_name, l->name, g_fx_blue);
-        if (!fx_print(FX_ICON_POL, g_fx_blue, name, ">> ", text)) return 0;
+        if (!fx_print(FX_ICON_POL, g_fx_blue, name, text, "")) return 0;
         g_fx.last_lo = MAIL(l->hdr)->from_lo;
         g_fx.last_hi = MAIL(l->hdr)->from_hi;
         g_fx.last_slot = MAIL(l->hdr)->from_slot;
@@ -441,6 +441,14 @@ static void fx_plain(const char *raw, char *out, int cap)
     out[cap - 1] = 0;
 }
 
+static int fx_is_away(const pol_friend *rows, DWORD lo, DWORD hi, int slot)
+{
+    int i;
+    for (i = 0; i < IG_FRIENDS && !IsBadReadPtr(&rows[i], sizeof rows[i]); i++)
+        if (pc_friend_valid(&rows[i]) && rows[i].id_lo == lo && rows[i].id_hi == hi && pc_friend_slot(&rows[i]) == slot)
+            return !(rows[i].flags & FRIEND_PENDING) && peers_friend_online(rows[i].flags) && ((rows[i].flags >> 13) & 7) == 2;
+    return 0;
+}
 static int fx_friend(BYTE *b, const char *typed, fx_send *s)
 {
     int i;
@@ -645,7 +653,7 @@ static void fx_answer_pump(BYTE *b)
 static void fx_command(BYTE *b)
 {
     static char line[FX_LINE_IN + 1], plain[FX_PLAIN];
-    char *who, *raw, name[FX_NAME + 8];
+    char *who, *raw, name[FX_NAME + 12];
     fx_send *s;
     int kind;
     lstrcpynA(line, (const char *)pc_addr_of(g_fx.base, AT_FX_EXPANDED), sizeof line);
@@ -684,8 +692,8 @@ static void fx_command(BYTE *b)
         return;
     }
     g_fx.nsends++;
-    wsprintfA(name, "[%s%s%s] ", g_fx_name, s->name, g_fx_blue);
-    fx_print(FX_ICON_POL, g_fx_blue, ">> ", name, s->text);
+    wsprintfA(name, "[%s%s%s%s] ", fx_is_away(pc_friend_row(b, 0), s->lo, s->hi, s->slot) ? fx_icon(FX_ICON_AWAY) : "", g_fx_name, s->name, g_fx_blue);
+    fx_print(FX_ICON_POL, g_fx_blue, "To ", name, s->text);
 }
 
 /* the game's own commands always win, this only sees one it didn't know */
@@ -1079,17 +1087,6 @@ static void fx_sender(const BYTE *hdr, char *out)
     }
     fx_clean((const BYTE *)MAIL(hdr)->name, sizeof MAIL(hdr)->name, out, FX_NAME);
 }
-static int fx_sender_away(const BYTE *hdr)
-{
-    int i;
-    for (i = 0; i < IG_FRIENDS; i++) {
-        const pol_friend *f = &g_ig.written.friends[i];
-        if (pc_friend_valid(f) && f->id_lo == MAIL(hdr)->from_lo && f->id_hi == MAIL(hdr)->from_hi &&
-            pc_friend_slot(f) == MAIL(hdr)->from_slot)
-            return !(f->flags & FRIEND_PENDING) && peers_friend_online(f->flags) && ((f->flags >> 13) & 7) == 2;
-    }
-    return 0;
-}
 static int fx_switched_off(const char *file) { return file[0] && GetFileAttributesA(file) != INVALID_FILE_ATTRIBUTES; }
 static int fx_ignored(const BYTE *hdr)
 {
@@ -1153,7 +1150,7 @@ static int fx_queue(int kind, const char *name, const char *text, const BYTE *hd
     if (l->state != FX_FREE) return 0;
     l->kind = kind;
     l->sound = (kind == FX_IN || kind == FX_NOTE) && !fx_switched_off(g_fx.quiet);
-    l->away = kind == FX_IN && hdr && fx_sender_away(hdr);
+    l->away = kind == FX_IN && hdr && fx_is_away(g_ig.written.friends, MAIL(hdr)->from_lo, MAIL(hdr)->from_hi, MAIL(hdr)->from_slot);
     l->move = kind == FX_IN || kind == FX_MOVE;
     l->tries = tries;
     l->next_try = GetTickCount();
@@ -1293,7 +1290,7 @@ static void fx_friend_lines(void)
             fx_append(text, sizeof text, kind == STARTED ? " is now playing FINAL FANTASY XI." : " is no longer playing FINAL FANTASY XI.");
             if (kind == STARTED) fx_playing_as(p, text, sizeof text);
         }
-        fx_queue(kind == PRESENCE ? FX_FRIEND : FX_PLAYING, name, text, NULL, NULL, 0);
+        fx_queue(kind == STARTED ? FX_PLAYING : FX_FRIEND, name, text, NULL, NULL, 0);
     }
     memcpy(g_fx.presence, now, n * sizeof now[0]);
     g_fx.npresence = n;
