@@ -237,6 +237,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
         _ => "",
     };
     [ObservableProperty] private string _handleName = "";
+    [ObservableProperty] private string? _hid;
     [ObservableProperty] private string _mail = "";
     [ObservableProperty] private string _ageText = "";
     [ObservableProperty] private bool _approximateAge;
@@ -440,6 +441,7 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
             Level = _savedLevel;
             _savedHandle = p.Handle.Trim();
             HandleName = _savedHandle;
+            Hid = p.Hid.Length > 0 ? "H-ID " + p.Hid : null;
             _handleCard.Title = _savedHandle;
             FillCards(p.Characters);
         }

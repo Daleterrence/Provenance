@@ -412,7 +412,7 @@ static int my_profile_write_json(BYTE *b)
         { "z_sex", 0 }, { "z_job", 0 }, { "z_area", 3 }, { "z_lang0", 0 }, { "z_fav0", 2 } };
     pdb_schema *s = g_profile_db_pib;
     pfb_hdr *p = g_pfb;
-    char key[16];
+    char key[16], hid[0x24];
     int i, ok = 0;
     ipc_json file;
     jw w = {0};
@@ -426,6 +426,10 @@ static int my_profile_write_json(BYTE *b)
     jw_int(&w, "slot", g_my_slot);
     wsprintfA(key, "%03x%08x", (unsigned)(g_me_hid >> 32), (unsigned)g_me_hid);
     jw_lit(&w, "key", key);
+    memset(hid, 0, sizeof hid);
+    if (pc_has(b, SV_FORMAT_HID)) pc_format_hid(b, hid, (DWORD)g_me_hid, (DWORD)(g_me_hid >> 32));
+    hid[0x20] = 0;
+    jw_str(&w, "hid", hid, 0xc00);
     jw_uint(&w, "level", ME_REC->level);
     jw_obj(&w, "fields");
     for (i = 0; i < (int)(sizeof g_me_fields / sizeof g_me_fields[0]); i++) {

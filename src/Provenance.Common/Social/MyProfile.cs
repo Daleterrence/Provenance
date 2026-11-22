@@ -23,6 +23,7 @@ public sealed record MyProfile(string Handle, PrivacyLevel Level, IReadOnlyDicti
 {
     public string Token { get; init; } = "";
     public string Key { get; init; } = "";
+    public string Hid { get; init; } = "";
     public IReadOnlyList<MyProfileCharacter> Characters { get; init; } = [];
 
     public static string PathForPid(int pid) => HookFiles.PathFor(pid, HookContract.Files.MyProfile);
@@ -65,6 +66,7 @@ public sealed record MyProfile(string Handle, PrivacyLevel Level, IReadOnlyDicti
             {
                 Token = Text(root, "token"),
                 Key = Text(root, "key"),
+                Hid = Text(root, "hid"),
                 Characters = characters,
             };
         }

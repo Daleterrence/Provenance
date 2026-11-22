@@ -183,6 +183,9 @@
                         <TextBlock Text="Handle name" Style="{StaticResource ProfileLabel}" />
                         <TextBox AutomationProperties.Name="Handle name" Style="{StaticResource FieldText}" MaxLength="{x:Static social:PolLimits.HandleName}"
                                  Text="{Binding HandleName, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox Style="{StaticResource SelectableText}" Text="{Binding Hid, Mode=OneWay}" FontSize="12" Margin="0,4,0,0"
+                                 Foreground="{DynamicResource Text.3}" AutomationProperties.Name="Handle ID"
+                                 Visibility="{Binding Hid, Converter={StaticResource NullToVisibilityConverter}}" />
                         <TextBlock Style="{StaticResource ProfileHelp}"
                                    Text="This is the name your friends see, up to 15 English letters, numbers and symbols. They'll see a new name the next time their friend list loads." />
                     </StackPanel>
