@@ -16,9 +16,11 @@ typedef void (__cdecl *ig_poll_fn)(int);
 static void fx_polled(void);
 static int lb_ready(BYTE *b);
 static void lb_tick(BYTE *b);
+static int lb_wanted(void);
 static void fx_session_up(void);
 static void fx_game_tick(BYTE *b);
 static void fx_poll(BYTE *b);
+static int fx_patched(void);
 static void fx_worker(BYTE *b);
 static int fx_wait(HANDLE wake, DWORD ms);
 static void fx_stop(void);
@@ -110,9 +112,12 @@ static void ig_write_off(void)
 
 static void ig_fault(const char *where)
 {
-    if (InterlockedExchange(&g_ig.off, 1)) return;
+    /* a second one and the hook is off the game's thread for good */
+    if (InterlockedExchange(&g_ig.off, 1)) {
+        ig_disarm();
+        return;
+    }
     fx_stop();
-    ig_disarm();
     if (g_ig.thread) SetEvent(g_ig.wake);
     else if (!g_ig.lobby_only) ig_write_off();
     base_log("ingame: fault %08x at %08x in the %s, friends stop updating for the rest of this game\r\n", g_ig.code, g_ig.at, where);
@@ -132,7 +137,7 @@ static void ig_tick(void)
     }
     fx_game_tick(g_ig.b);
     lb_tick(g_ig.b);
-    if (g_ig.lobby_only || pc_game_tag(g_ig.b) < 0) return;
+    if (g_ig.off || g_ig.lobby_only || pc_game_tag(g_ig.b) < 0) return;
     if (!(g_ig.said & 2)) {
         g_ig.said |= 2;
         base_log("ingame: FFXI's session is up, copying the friends list from here\r\n");
@@ -154,13 +159,15 @@ static void ig_tick(void)
 static void __cdecl ig_poll(int unused)
 {
     if (g_ig.prev) g_ig.prev(unused);
-    if (g_ig.off || g_ig.stop) return;
+    if (g_ig.stop) return;
     __try {
         ig_tick();
     } __except (ig_filter(GetExceptionInformation())) {
         ig_fault("game thread");
     }
     fx_poll(g_ig.b);
+    /* with the friends list off it's only here for the chat's calls to go back and for the lobby */
+    if (g_ig.off && !fx_patched() && !lb_wanted()) ig_disarm();
 }
 
 /* 0 when the file didn't go in, the worker tries again soon */

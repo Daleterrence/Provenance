@@ -9,8 +9,8 @@ enum { FX_ICON_NONE, FX_ICON_POL, FX_ICON_AWAY, FX_ICON_FFXI, FX_ICON_INFO };
 enum { FX_CMD_NONE, FX_CMD_M, FX_CMD_RM };
 enum { FX_SENDS = 4, FX_SEND_GAP_MS = 5000, FX_LINE_IN = 150, FX_PLAIN = 0x800, FX_SENT_IDS = 64, FX_COPIES = 4, FX_FRIEND_LINES = 4, FX_FRIEND_RING = 8, FX_FRIEND_BURST = 4 };
 enum { FX_CMD_FR = FX_CMD_RM + 1, FX_WAITING = 16, FX_ANSWER_MS = 30000, FX_NAMES_MAX = 0x40000, FX_STOP_GRACE_MS = 10000, FX_NAME_WAIT_MS = 25000,
-       FX_ICON_OFF_MS = 30000, FX_ICON_FAULTS = 3, FX_LIST_MAX = 4096, FX_PIECES_MAX = 16 };
-enum { FX_ANS_NONE, FX_ANS_WANTED, FX_ANS_RUNNING };
+       FX_ICON_OFF_MS = 30000, FX_ICON_FAULTS = 3, FX_LIST_MAX = 4096, FX_PIECES_MAX = 16, FX_ANSWER_LATE_MS = 60000 };
+enum { FX_ANS_NONE, FX_ANS_WANTED, FX_ANS_RUNNING, FX_ANS_LATE };
 enum { FX_REQ_NO, FX_REQ_NEW, FX_REQ_DONE, FX_REQ_KEPT };
 
 /* 0x1e and a number colours what follows and lasts past a wrap. 0x1f and a chat mode's colour stops at the first one */
@@ -53,7 +53,7 @@ typedef struct {
 
 typedef struct { DWORD seq, time, lo, hi; int slot, used; char name[FX_NAME]; } fx_request;
 typedef struct { char name[100]; DWORD from_lo, from_hi, seq, time, first, gen; int slot, done, req; } fx_seen_rec;
-typedef struct { DWORD lo, hi, ctsid, ct_lo, ct_hi; int slot, on, row, changed, game, game_changed; ULONGLONG stop_at, start_at; } fx_presence;
+typedef struct { DWORD lo, hi, ctsid, ct_lo, ct_hi; int slot, on, row, changed, game, game_changed, held; ULONGLONG stop_at, start_at; } fx_presence;
 
 static struct {
     volatile LONG found, resolved, first_poll, world, off, patched, watching, in_world, dirty, moved, nsent_ids, worker_dead, at_select;
@@ -110,13 +110,14 @@ static int fx_answers(void)
 
 static int fx_lead(BYTE c) { return (c >= 0x81 && c <= 0x9f) || (c >= 0xe0 && c <= 0xfc); }
 
-/* Shift-JIS pairs and printable bytes stay, anything that could recolour, split or expand the line becomes a space */
+/* Shift-JIS pairs and printable bytes stay, anything that could recolour, split or expand the line becomes a space.
+   0xef leads the game's own icons, so it never starts a pair */
 static int fx_clean(const BYTE *in, int n, char *out, int cap)
 {
     int i = 0, o = 0;
     while (i < n && in[i] && o < cap - 1) {
         BYTE c = in[i];
-        if (fx_lead(c)) {
+        if (fx_lead(c) && c != 0xef) {
             BYTE t = i + 1 < n ? in[i + 1] : 0;
             if ((t >= 0x40 && t <= 0x7e) || (t >= 0x80 && t <= 0xfc)) {
                 if (o + 2 >= cap) break;
@@ -209,7 +210,7 @@ static int fx_icon_paint(BYTE *slot, BYTE **pieces, int n, const fx_icon_def *d)
 {
     BYTE *first = pieces[0], was[0xd0];
     short *at = (short *)(first + 8);
-    int i, k;
+    int i, k, bound = 0;
     memcpy(was, first, sizeof was);
     memcpy(first + 0x32, d->pic, 16);
     at[0] = d->w;
@@ -227,10 +228,12 @@ static int fx_icon_paint(BYTE *slot, BYTE **pieces, int n, const fx_icon_def *d)
     }
     *(void **)(first + 0x4c) = NULL;
     /* the game's own, finds the picture by its name and works out the UVs */
-    if (!((fx_bind_fn)pc_addr_of(g_fx.base, AT_FX_ICON_BIND))(first)) {
-        memcpy(first, was, sizeof was);
-        return 0;
+    __try {
+        bound = ((fx_bind_fn)pc_addr_of(g_fx.base, AT_FX_ICON_BIND))(first);
+    } __finally {
+        if (!bound) memcpy(first, was, sizeof was);
     }
+    if (!bound) return 0;
     for (k = 1; k < n; k++)
         for (i = 0; i < 4; i++) *(DWORD *)(pieces[k] + 0x60 + i * 0x1c) = 0;
     at = (short *)(slot + 0x20);
@@ -444,7 +447,7 @@ static void fx_plain(const char *raw, char *out, int cap)
 static int fx_is_away(const pol_friend *rows, DWORD lo, DWORD hi, int slot)
 {
     int i;
-    for (i = 0; i < IG_FRIENDS && !IsBadReadPtr(&rows[i], sizeof rows[i]); i++)
+    for (i = 0; i < IG_FRIENDS; i++)
         if (pc_friend_valid(&rows[i]) && rows[i].id_lo == lo && rows[i].id_hi == hi && pc_friend_slot(&rows[i]) == slot)
             return !(rows[i].flags & FRIEND_PENDING) && peers_friend_online(rows[i].flags) && ((rows[i].flags >> 13) & 7) == 2;
     return 0;
@@ -551,7 +554,7 @@ static void fx_req_sync(void)
 static BYTE __cdecl fx_answer_callback(int tag, int unused, int code, int extra)
 {
     (void)tag; (void)unused; (void)extra;
-    if (g_fx.ans_state == FX_ANS_RUNNING && !g_fx.ans_done) {
+    if ((g_fx.ans_state == FX_ANS_RUNNING || g_fx.ans_state == FX_ANS_LATE) && !g_fx.ans_done) {
         g_fx.ans_code = code;
         g_fx.ans_done = 1;
     }
@@ -631,6 +634,8 @@ static void fx_answer_pump(BYTE *b)
         }
         fx_answer_start(b);
     }
+    /* a reply that comes after the 30s has no tag to tell it from the next answer's, so nothing new starts till it has */
+    if (g_fx.ans_state == FX_ANS_LATE && (g_fx.off || g_fx.ans_done || GetTickCount64() - g_fx.ans_at >= FX_ANSWER_LATE_MS)) fx_answer_end();
     if (g_fx.ans_state != FX_ANS_RUNNING) return;
     if (g_fx.ans_done) {
         code = (int)g_fx.ans_code;
@@ -645,6 +650,10 @@ static void fx_answer_pump(BYTE *b)
         }
     } else if (GetTickCount64() - g_fx.ans_at >= FX_ANSWER_MS) {
         fx_answer_end();
+        if (!g_fx.off) {
+            g_fx.ans_state = FX_ANS_LATE;
+            g_fx.ans_at = GetTickCount64();
+        }
         base_log("ffxi: a friend request answer got no reply in 30s\r\n");
         fx_answer_say(g_fx_red, g_fx_not_answered);
     }
@@ -867,7 +876,12 @@ static void fx_patch(void)
 }
 static void fx_unpatch(void)
 {
-    if (!g_fx.patched) return;
+    if (!g_fx.patched) {
+        /* a patch that faulted part way has only the count call repointed */
+        if (g_fx.count) fx_restore(AT_FX_COUNT_CALL, (void *)fx_count, g_fx.count_was);
+        g_fx.count = NULL;
+        return;
+    }
     if (g_fx.commands && g_fx.job < 0 && !g_fx.msg && !g_fx.nsends && !g_fx.unsent && g_fx.ans_state == FX_ANS_NONE) {
         fx_restore(AT_FX_LOOKUP_CALL, (void *)fx_lookup, g_fx.lookup_was);
         g_fx.commands = 0;
@@ -1265,6 +1279,7 @@ static void fx_friend_lines(void)
                               (p->game && (was->ctsid != p->ctsid || was->ct_lo != p->ct_lo || was->ct_hi != p->ct_hi));
             p->stop_at = was->stop_at;
             p->start_at = was->start_at;
+            p->held = was->held;
             break;
         }
         changes += p->changed || p->game_changed;
@@ -1276,26 +1291,29 @@ static void fx_friend_lines(void)
     game_lines = !fx_switched_off(g_fx.no_playing_lines);
     for (i = 0; i < n; i++) {
         fx_presence *p = &now[i];
-        int kind = NONE, unsaid = p->start_at != 0;
+        int kind = NONE, unsaid = p->start_at != 0, quiet = p->held && !p->on;
         if (!p->on || !p->game) p->start_at = 0;
+        if (!p->start_at) p->held = 0;
         if (!p->on || p->game) p->stop_at = 0;
         /* straight from offline into the game is the one line. Leaving it waits a moment, they're usually going offline too */
         if (p->game_changed && p->on && p->game) {
             p->start_at = show && game_lines && fx_name_coming(p) ? tick : 0;
+            p->held = p->start_at && p->changed;
             kind = show && game_lines && !p->start_at ? STARTED : NONE;
         } else if (p->game_changed && p->on && !p->changed) p->stop_at = show && game_lines && !unsaid ? tick : 0;
         if (!kind && p->start_at && (tick - p->start_at >= FX_NAME_WAIT_MS || !fx_name_coming(p))) {
             if (live && game_lines) kind = STARTED;
-            else p->start_at = 0;
+            else p->start_at = p->held = 0;
         }
         if (!kind && p->stop_at && tick - p->stop_at >= FX_STOP_GRACE_MS) {
             if (live && game_lines) kind = STOPPED;
             else p->stop_at = 0;
         }
-        if (!kind && on_lines && p->changed && !p->start_at) kind = PRESENCE;
+        /* an online line held back for the playing line was never said, so going offline first is no line either */
+        if (!kind && on_lines && p->changed && !p->start_at && !quiet) kind = PRESENCE;
         if (!kind || !fx_friend_room()) continue;
         if (kind == STOPPED) p->stop_at = 0;
-        if (kind == STARTED) p->start_at = 0;
+        if (kind == STARTED) p->start_at = p->held = 0;
         fx_clean((const BYTE *)g_ig.written.friends[p->row].name, 16, name, sizeof name);
         if (!name[0]) continue;
         lstrcpyA(text, g_fx_name);
@@ -1522,6 +1540,7 @@ static void fx_moves(BYTE *b)
 }
 
 static void fx_stop(void) { g_fx.off = 1; }
+static int fx_patched(void) { return g_fx.patched; }
 static void fx_reset(void)
 {
     memset(&g_fx, 0, sizeof g_fx);
@@ -1583,11 +1602,13 @@ static void fx_worker(BYTE *b)
     }
     __try {
         if (!g_fx.found) {
-            if (g_fx.tries >= FX_TRIES || !g_fx.first_poll) return;
+            /* the session coming up is worth one more look, a slow start can have used the lot */
             if (g_fx.world == 1) {
                 g_fx.world = 2;
                 g_fx.next_look = 0;
+                if (g_fx.tries >= FX_TRIES) g_fx.tries = FX_TRIES - 1;
             }
+            if (g_fx.tries >= FX_TRIES || !g_fx.first_poll) return;
             /* the licence window is up within seconds, so a game the lobby has work in is looked at sooner */
             if (!g_fx.world && now - g_fx.polled_at < (ULONGLONG)(lb_wanted() ? FX_LOBBY_LOOK_MS : FX_LOOK_AFTER_MS)) return;
             if (now < g_fx.next_look) return;

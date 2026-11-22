@@ -46,7 +46,7 @@ static void lb_play_file(void)
     }
 }
 
-/* a slot is a place on the lobby's list, counted from 1. The list has no gaps */
+/* a slot is a place on the lobby's list, counted from 1 */
 static int lb_slot(const char *s)
 {
     int n = 0;
@@ -69,10 +69,12 @@ static int lb_ready(BYTE *b)
     } else if (n) {
         lstrcpyA(g_lb.name, name);
         g_lb.picking = 1;
-        if (!GetEnvironmentVariableA(ENV_CHARACTER_WORLD, g_lb.world, sizeof g_lb.world)) g_lb.world[0] = 0;
-    } else if ((n = GetEnvironmentVariableA(ENV_CHARACTER_SLOT, v, sizeof v)) > 0 && n < sizeof v) {
-        g_lb.slot = lb_slot(v);
+        n = GetEnvironmentVariableA(ENV_CHARACTER_WORLD, g_lb.world, sizeof g_lb.world);
+        if (!n || n >= sizeof g_lb.world) g_lb.world[0] = 0;
+    } else if ((n = GetEnvironmentVariableA(ENV_CHARACTER_SLOT, v, sizeof v)) > 0) {
+        g_lb.slot = n < sizeof v ? lb_slot(v) : 0;
         g_lb.picking = g_lb.slot != 0;
+        if (!g_lb.slot) base_log("lobby: the character slot can't be used, a character isn't picked\r\n");
     }
     if (!g_lb.licence && !g_lb.picking) return 0;
     if (!pc_addr_found(AT_POLL_CALLBACK)) {
@@ -96,6 +98,8 @@ static int lb_have(const int *ids, int n)
     return 1;
 }
 
+static int lb_alone(void) { return g_ig.lobby_only || g_ig.off; }
+
 /* in a game with no friends list nothing else looks at FFXiMain, so this does */
 static void lb_look(ULONGLONG now)
 {
@@ -112,7 +116,7 @@ static void lb_look(ULONGLONG now)
 /* whether the looking for FFXiMain's addresses is over, so a missing one is missing for good */
 static int lb_looked(void)
 {
-    return g_ig.lobby_only ? g_lb.tried >= FX_TRIES : g_fx.found || g_fx.tries >= FX_TRIES;
+    return lb_alone() ? g_lb.tried >= FX_TRIES : g_fx.found || g_fx.tries >= FX_TRIES;
 }
 
 static int lb_kind(const char *name)
@@ -185,7 +189,12 @@ static void lb_tell_chars(ULONGLONG now)
     HANDLE f;
     BYTE *m;
     int n;
-    if (!g_fx.resolved || !pc_addr_found(AT_FX_CHAR_LIST_MENU) || !(m = lb_menu(AT_FX_CHAR_LIST_MENU))) return;
+    if (!g_fx.resolved || !pc_addr_found(AT_FX_CHAR_LIST_MENU)) return;
+    /* no list is the lobby gone, so the next time it's up the app's told afresh */
+    if (!(m = lb_menu(AT_FX_CHAR_LIST_MENU))) {
+        g_lb.chars_n = g_lb.chars_told = 0;
+        return;
+    }
     if (!(n = lb_chars_text(m, text))) return;
     if (n != g_lb.chars_n || memcmp(text, g_lb.chars, (size_t)n)) {
         memcpy(g_lb.chars, text, (size_t)n);
@@ -280,11 +289,13 @@ static int lb_error(ULONGLONG now)
 {
     BYTE *m = lb_menu(AT_FX_OK_MENU);
     if (!m) return 0;
+    if (!g_lb.error_at) g_lb.error_at = now;
     if (g_lb.retries >= LB_RETRIES || !lb_says_3101(m)) {
+        /* its text may not be there on the first look */
+        if (g_lb.retries < LB_RETRIES && now - g_lb.error_at < LB_SETTLE_MS) return 0;
         lb_finish("the game gave an error");
         return 1;
     }
-    if (!g_lb.error_at) g_lb.error_at = now;
     if (now - g_lb.error_at < LB_ERROR_MS) return 0;
     *(int *)(m + 0x25c) = 1;
     g_lb.retries++;
@@ -345,7 +356,7 @@ static void lb_step(void)
     char name[17];
     int kind;
     if (!g_fx.resolved) {
-        if (!g_ig.lobby_only) return;
+        if (!lb_alone()) return;
         lb_look(now);
         if (!g_fx.resolved) {
             if (g_lb.tried >= FX_TRIES) {
@@ -370,9 +381,10 @@ static void lb_step(void)
     if (lb_picking_on() && g_fx.in_world) lb_finish("the player's in the world");
     if (lb_picking_on() && g_lb.stage == LB_AWAIT_CONFIRM && now - g_lb.picked_at > LB_PICK_MS) lb_finish("no confirm box came");
     if (lb_picking_on() && g_lb.stage == LB_AWAIT_WORLD && now - g_lb.confirmed_at > LB_WORLD_MS) lb_finish("the login wasn't seen to finish");
-    if (lb_picking_on() && g_lb.stage == LB_AWAIT_WORLD && !lb_menu(AT_FX_CHAR_LIST_MENU)) lb_finish("the lobby's closed");
-    if (!lb_licence_on() && !lb_picking_on()) return;
     kind = fx_menu_name(name) ? lb_kind(name) : LB_NONE;
+    /* with an error box up the lobby isn't over, whatever its pointers say */
+    if (lb_picking_on() && g_lb.stage == LB_AWAIT_WORLD && kind != LB_OK && !lb_menu(AT_FX_CHAR_LIST_MENU)) lb_finish("the lobby's closed");
+    if (!lb_licence_on() && !lb_picking_on()) return;
     if (kind == LB_LIST && lb_picking_on() && lb_pick_lost(now)) {
         g_lb.stage = LB_PICKING;
         g_lb.answered = LB_NONE;
@@ -388,12 +400,19 @@ static void lb_step(void)
 static void lb_tick(BYTE *b)
 {
     (void)b;
-    if (g_lb.chars_off && !lb_wanted()) return;
+    if (lb_wanted()) {
+        __try {
+            lb_step();
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            g_lb.licence_off = g_lb.picking_off = g_lb.chars_off = 1;
+            base_log("lobby: fault %08x, the lobby's left to the player for the rest of this game\r\n", GetExceptionCode());
+        }
+    }
+    if (g_lb.chars_off) return;
     __try {
-        if (lb_wanted()) lb_step();
-        if (!g_lb.chars_off) lb_tell_chars(GetTickCount64());
+        lb_tell_chars(GetTickCount64());
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        g_lb.licence_off = g_lb.picking_off = g_lb.chars_off = 1;
-        base_log("lobby: fault %08x, the lobby's left to the player for the rest of this game\r\n", GetExceptionCode());
+        g_lb.chars_off = 1;
+        base_log("lobby: fault %08x reading the character list, Provenance isn't told it in this game\r\n", GetExceptionCode());
     }
 }
