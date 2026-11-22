@@ -74,7 +74,8 @@ public static class OtpSources
     public static bool StartsWithDash(string item) => item.TrimStart().StartsWith('-');
 
     private static readonly Regex Colours = new(@"\x1b\[[0-9;]*m"), LogStamp = new(@"^\[ERROR\]\s+\S+\s+\S+\s+"), Address = new(@"\S+@\S+"),
-                                  Url = new(@"https?://\S+"), Quoted = new("\"[^\"]+\"");
+                                  Url = new(@"https?://\S+"), Quoted = new("\"[^\"]+\"|(?<![\\w'])'[^']+'(?![\\w'])"),
+                                  Folder = new(@"(?<!\w)(?:[A-Za-z]:[\\/]|\\\\)\S*"), Host = new(@"(?<![\w.<-])(?:[\w-]+\.)+[\w-]+(?::\d+)?");
 
     internal static string ErrorLine(string err)
     {
@@ -82,13 +83,15 @@ public static class OtpSources
         return LogStamp.Replace(line, "");
     }
 
-    // what the tool itself said, for the log: its first line without the item's name, addresses or anything else it quotes
+    // what the tool itself said, for the log: its first line without the item's name, servers, paths or anything it quotes
     internal static string Said(string err, string item)
     {
         var line = ErrorLine(err);
-        if (item.Trim() is { Length: > 0 } name) line = line.Replace(name, "<item>", StringComparison.OrdinalIgnoreCase);
+        if (item.Trim() is { Length: > 0 } name)
+            line = Regex.Replace(line, $@"(?<!\w){Regex.Escape(name)}(?!\w)", "<item>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        line = Quoted.Replace(line, m => m.Value[1..^1] == "<item>" ? m.Value : $"{m.Value[0]}<name>{m.Value[0]}");
         line = Address.Replace(Url.Replace(line, "<address>"), "<email>");
-        line = Quoted.Replace(line, m => m.Value == "\"<item>\"" ? m.Value : "\"<name>\"");
+        line = Host.Replace(Folder.Replace(line, "<path>"), "<address>");
         return line.Length > 160 ? line[..160] : line;
     }
 

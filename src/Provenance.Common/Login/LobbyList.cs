@@ -27,7 +27,8 @@ public static class LobbyList
                 // one the hook has written again since stays for the next look
                 if (Read(path) == text) HookFiles.Delete(pid, HookContract.Files.Slots);
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            // on a timer in the window's thread, nothing can be let out of here
+            catch (Exception e)
             {
                 if (Warned.Add(pid)) Log.Warning("The game's character list couldn't be taken up ({Error}: {Message})", e.GetType().Name, e.Message);
             }
@@ -55,8 +56,8 @@ public static class LobbyList
         {
             var part = line.Split('\t');
             if (part.Length != 3 || !int.TryParse(part[0], NumberStyles.None, CultureInfo.InvariantCulture, out int slot) || !AutoLogin.IsSlot(slot)
-                || list.Any(c => c.Slot == slot)) return null;
-            if (AutoLogin.IsName(part[1])) list.Add(new(part[1], AutoLogin.WorldNamed(part[2]), slot));
+                || list.Any(c => c.Slot == slot) || !AutoLogin.IsName(part[1])) return null;
+            list.Add(new(part[1], AutoLogin.WorldNamed(part[2]), slot));
         }
         return list.Count > 0 ? list : null;
     }

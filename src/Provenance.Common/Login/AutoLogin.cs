@@ -63,12 +63,13 @@ public static class AutoLogin
     private static bool Take(Account account, List<AccountCharacter> found)
     {
         var before = (account.AutoLoginCharacter, account.AutoLoginWorld, account.AutoLoginSlot);
+        bool lone = account.AutoLoginCharacter is { } was && account.Characters.Count(c => Named(c, was)) <= 1;
         bool same = found.SequenceEqual(account.Characters);
         if (!same) account.Characters = found;
         if (account.AutoLoginCharacter is { } chosen && !found.Any(c => Chosen(account, c)))
         {
-            // the only character by that name is still the one, whatever world it was saved with
-            var named = found.Where(c => Named(c, chosen)).ToList();
+            // the only character by that name is still the one, whatever world it was saved with. A namesake it already had isn't
+            var named = lone ? found.Where(c => Named(c, chosen)).ToList() : [];
             (account.AutoLoginCharacter, account.AutoLoginWorld) = named.Count == 1 ? (named[0].Name, named[0].World) : (null, null);
         }
         // only the game's list has slots, POL's order isn't the game's

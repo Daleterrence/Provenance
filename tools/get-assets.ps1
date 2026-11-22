@@ -39,7 +39,10 @@ $fresh = "$dir.$run"
 try {
     if ("$($pin.url)" -notmatch '^https://') { throw "tools\assets.json names $($pin.url), which isn't an https:// address, so nothing was downloaded." }
     Write-Host "Downloading Provenance's images from $($pin.url)"
-    Invoke-WebRequest -Uri $pin.url -OutFile $zip -UseBasicParsing -TimeoutSec 300
+    # TimeoutSec is only the wait for the server to answer. Newer PowerShell can also give up on a download that stops moving
+    $stall = @{}
+    if ((Get-Command Invoke-WebRequest).Parameters.ContainsKey('OperationTimeoutSeconds')) { $stall.OperationTimeoutSeconds = 60 }
+    Invoke-WebRequest -Uri $pin.url -OutFile $zip -UseBasicParsing -TimeoutSec 300 @stall
     $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($hash -cne $pin.sha256) {
         throw "The download isn't the file tools\assets.json names (its SHA-256 is $hash), so nothing was unpacked."

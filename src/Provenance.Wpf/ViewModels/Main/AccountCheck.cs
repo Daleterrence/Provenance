@@ -84,19 +84,21 @@ internal sealed class AccountCheck(IDialogs dialogs, PolSession session, GameLau
             Running = false;
             RunningChanged?.Invoke();
         }
+        var verdict = AccountCheckRules.Judge(result.Code, result.Refusal);
+        // counted before a late cancel is looked at, POL counted the try whether anyone's still waiting or not
+        if (verdict == AccountCheckVerdict.Accepted) refused.Clear(typed.PolId);
+        else if (verdict == AccountCheckVerdict.Refused) refused.Add(typed.PolId);
+        else if (verdict == AccountCheckVerdict.Locked) refused.MarkLocked(typed.PolId);
         if (ct.IsCancellationRequested) return Back;
-        switch (AccountCheckRules.Judge(result.Code, result.Refusal))
+        switch (verdict)
         {
             case AccountCheckVerdict.Accepted:
-                refused.Clear(typed.PolId);
                 return new(new(true), snap);
             case AccountCheckVerdict.Cancelled:
                 return Back;
             case AccountCheckVerdict.Refused:
-                refused.Add(typed.PolId);
                 return new(new(false, failure ?? HookExitText.RefusedText), null);
             case AccountCheckVerdict.Locked:
-                refused.MarkLocked(typed.PolId);
                 return Offer(failure ?? PolAccountNotices.LogInRefused(-205));
             default:
                 return Offer(failure ?? $"Provenance couldn't log in to PlayOnline (code {result.Code}).");
