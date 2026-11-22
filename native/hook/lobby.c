@@ -360,6 +360,12 @@ static void lb_step(void)
     char name[17];
     int kind;
     if (!g_fx.resolved) {
+        /* the sampler's look faulted, another go from here would only fault on the game's thread */
+        if (g_fx.worker_dead) {
+            g_lb.licence_off = g_lb.picking_off = 1;
+            base_log("lobby: the look for FFXiMain's addresses faulted, the lobby's left to the player\r\n");
+            return;
+        }
         if (!lb_alone()) return;
         lb_look(now);
         if (!g_fx.resolved) {

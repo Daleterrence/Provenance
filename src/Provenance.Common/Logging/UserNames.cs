@@ -32,16 +32,9 @@ public static partial class UserNames
     private static string HideName(Match found)
     {
         string name = found.Groups["name"].Value, kept = name.TrimEnd('.', '\'', ')', ']');
-        if (kept.Length == 0) return found.Value;
-        bool loose = found.Groups["loose"].Success;
-        foreach (string nobody in NobodysFolders)
-            if (kept.Equals(nobody, StringComparison.OrdinalIgnoreCase) || loose && Sentence(kept, nobody)) return found.Value;
+        if (kept.Length == 0 || NobodysFolders.Contains(kept, StringComparer.OrdinalIgnoreCase)) return found.Value;
         return found.Groups["root"].Value + Hidden + name[kept.Length..];
     }
-
-    // with no slash or quote to end the name, a small letter on the next word is a sentence carrying on after the folder
-    private static bool Sentence(string kept, string nobody) =>
-        kept.Length > nobody.Length + 1 && kept.StartsWith(nobody + " ", StringComparison.OrdinalIgnoreCase) && char.IsAsciiLetterLower(kept[nobody.Length + 1]);
 
     // the name after X:\Users\ runs to a closing quote mark, the next slash, or three words when neither's there.
     // taking a word too many beats leaving one behind
@@ -49,7 +42,7 @@ public static partial class UserNames
         (?<root>(?:(?<![\w.])[a-z]:|(?<![\w.:\\/])[\\/]{2}[^\\/\s]{1,64})[\\/]{1,2}Users[\\/]{1,2})
         (?:(?<name>[^\\/:*?"<>|\r\n]{1,40}?)(?='(?:[\s.,;)]|\z))
           |(?<name>[^\\/:*?"<>|\s]{1,40}(?:\x20[^\\/:*?"<>|\s]{1,40}){0,2}?)(?=[\\/])
-          |(?<name>[^\\/:*?"<>|\s,;]{1,40}(?:\x20[^\\/:*?"<>|\s,;]{1,40}){0,2})(?<loose>))
+          |(?<name>[^\\/:*?"<>|\s,;]{1,40}(?:\x20[^\\/:*?"<>|\s,;]{1,40}){0,2}))
         """, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.IgnorePatternWhitespace)]
     private static partial Regex InUsers();
 }

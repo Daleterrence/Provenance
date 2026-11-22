@@ -75,7 +75,9 @@ public static class OtpSources
 
     private static readonly Regex Colours = new(@"\x1b\[[0-9;]*m"), LogStamp = new(@"^\[ERROR\]\s+\S+\s+\S+\s+"), Address = new(@"\S+@\S+"),
                                   Url = new(@"https?://\S+"), Quoted = new("\"[^\"]+\"|(?<![\\w'])'[^']+'(?![\\w'])"),
-                                  Folder = new(@"(?<!\w)(?:[A-Za-z]:[\\/]|\\\\)\S*"), Host = new(@"(?<![\w.<-])(?:[\w-]+\.)+[\w-]+(?::\d+)?");
+                                  Folder = new(@"(?<!\w)(?:[A-Za-z]:[\\/]|\\\\)(?:(?![A-Za-z]:[\\/])[^""<>|?*:\r\n])*"),
+                                  Host = new(@"(?<![\w-])(?:[\w-]+\.)+[\w-]+(?::\d+)?"), Lookup = new(@"\b(getaddrinfo \w+ )[\w.-]+"),
+                                  Port = new(@"(?<![\w.:-])(?=[\w-]*[A-Za-z])[\w-]+:\d{2,5}(?![\w.:])");
 
     internal static string ErrorLine(string err)
     {
@@ -91,7 +93,9 @@ public static class OtpSources
             line = Regex.Replace(line, $@"(?<!\w){Regex.Escape(name)}(?!\w)", "<item>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         line = Quoted.Replace(line, m => m.Value[1..^1] == "<item>" ? m.Value : $"{m.Value[0]}<name>{m.Value[0]}");
         line = Address.Replace(Url.Replace(line, "<address>"), "<email>");
-        line = Host.Replace(Folder.Replace(line, "<path>"), "<address>");
+        // a path can have spaces in it, so it takes the rest of the line up to something a path can't have
+        line = Folder.Replace(line, m => "<path>" + m.Value[m.Value.TrimEnd().Length..]);
+        line = Port.Replace(Host.Replace(Lookup.Replace(line, "$1<address>"), "<address>"), "<address>");
         return line.Length > 160 ? line[..160] : line;
     }
 
