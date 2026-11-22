@@ -73,6 +73,25 @@ public static class OtpSources
     // a leading dash would make the item an option, and settings.json is the user's, so this is checked at the run too
     public static bool StartsWithDash(string item) => item.TrimStart().StartsWith('-');
 
+    private static readonly Regex Colours = new(@"\x1b\[[0-9;]*m"), LogStamp = new(@"^\[ERROR\]\s+\S+\s+\S+\s+"), Address = new(@"\S+@\S+");
+
+    internal static string ErrorLine(string err)
+    {
+        var line = Colours.Replace(err, "").Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0) ?? "";
+        return LogStamp.Replace(line, "");
+    }
+
+    // what the tool itself said, for the log: its first line with the item's name and any email address taken out
+    internal static string Said(string err, string item)
+    {
+        var line = ErrorLine(err);
+        if (item.Trim() is { Length: > 0 } name) line = line.Replace(name, "<item>", StringComparison.OrdinalIgnoreCase);
+        line = Address.Replace(line, "<email>");
+        return line.Length > 160 ? line[..160] : line;
+    }
+
+    internal static string AndSaid(string outcome, string err, string item) => Said(err, item) is { Length: > 0 } said ? $"{outcome}: {said}" : outcome;
+
     internal static OtpFetchResult CodeFrom(ToolProcess.RunResult r, Func<string, (string Outcome, string Text, OtpFix Fix)> problem)
     {
         var code = r.Out.Trim();

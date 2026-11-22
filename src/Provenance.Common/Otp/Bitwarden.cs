@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Serilog;
 
 namespace Provenance.Common.Otp;
@@ -28,7 +27,7 @@ public static class Bitwarden
                                                    new Dictionary<string, string> { ["PROVENANCE_BW_PASSWORD"] = masterPassword },
                                                    TimeSpan.FromSeconds(60), ct);
                 if (u.Exit != 0 || u.Out.Trim().Length == 0)
-                    return OtpSources.Problem($"didn't unlock (exit {u.Exit})", "Bitwarden didn't unlock.", OtpFix.MasterPassword);
+                    return OtpSources.Problem(OtpSources.AndSaid($"didn't unlock (exit {u.Exit})", u.Err, item), "Bitwarden didn't unlock.", OtpFix.MasterPassword);
                 _session = u.Out.Trim();
             }
             if (_session is { } session) env["BW_SESSION"] = session;
@@ -40,10 +39,11 @@ public static class Bitwarden
                 _session = null;
                 return OtpSources.Problem("locked", "Bitwarden is locked.", OtpFix.MasterPassword);
             }
-            if (status != "unlocked") return OtpSources.Problem("no status", "Bitwarden didn't answer.");
+            if (status != "unlocked")
+                return OtpSources.Problem(status.Length == 0 ? "no status" : $"unknown status ({OtpSources.Said(status, item)})", "Bitwarden didn't answer.");
             var r = await ToolProcess.RunAsync(bw, ["get", "totp", item, "--nointeraction"], env, TimeSpan.FromSeconds(30), ct);
             // bw never syncs by itself, so an item added since it logged in isn't there yet
-            if (r.Exit != 0 && CleanError(r.Err) == "Not found.")
+            if (r.Exit != 0 && OtpSources.ErrorLine(r.Err) == "Not found.")
             {
                 var sync = await ToolProcess.RunAsync(bw, ["sync", "--nointeraction"], env, TimeSpan.FromSeconds(60), ct);
                 Log.Information("Bitwarden item not found, synced (exit {Exit}) and asked again", sync.Exit);
@@ -63,9 +63,9 @@ public static class Bitwarden
             return ("several items", $"More than one Bitwarden item is called \"{item}\".", OtpFix.TypeInstead);
         if (Says("No TOTP available"))
             return ("no authenticator key", $"The Bitwarden item \"{item}\" has no authenticator key.", OtpFix.TypeInstead);
-        if (CleanError(err) == "Not found.")
+        if (OtpSources.ErrorLine(err) == "Not found.")
             return ("not an item", $"Bitwarden has no item called \"{item}\".", OtpFix.TypeInstead);
-        return ("unrecognised error", "Bitwarden didn't give the code.", OtpFix.TryAgain);
+        return (OtpSources.AndSaid("unrecognised error", err, item), "Bitwarden didn't give the code.", OtpFix.TryAgain);
     }
 
     private static async Task<string> StatusAsync(string bw, IDictionary<string, string>? env, CancellationToken ct)
@@ -76,7 +76,11 @@ public static class Bitwarden
             using var doc = JsonDocument.Parse(s.Out);
             return doc.RootElement.GetProperty("status").GetString() ?? "";
         }
-        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException) { return ""; }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            Log.Information("Bitwarden gave no status (exit {Exit}): {Said}", s.Exit, OtpSources.Said(s.Err, ""));
+            return "";
+        }
     }
 
     public static string? Server(string picked, string typed)
@@ -183,12 +187,5 @@ public static class Bitwarden
             await LockAsync(bw, session, TimeSpan.FromSeconds(5), cts.Token);
         }
         catch (Exception ex) { Log.Warning(ex, "Locking Bitwarden failed"); }
-    }
-
-    private static string CleanError(string err)
-    {
-        var line = Regex.Replace(err, @"\x1b\[[0-9;]*m", "").Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Length > 0) ?? "";
-        line = Regex.Replace(line, @"^\[ERROR\]\s+\S+\s+\S+\s+", "");
-        return line;
     }
 }

@@ -44,7 +44,7 @@ public static class OnePassword
             return ("not an item", $"1Password has no item called \"{item}\".", OtpFix.TypeInstead);
         if (Says("More than one item matches"))
             return ("several items", $"More than one 1Password item is called \"{item}\".", OtpFix.TypeInstead);
-        return ("unrecognised error", "1Password didn't give the code.", OtpFix.TryAgain);
+        return (OtpSources.AndSaid("unrecognised error", err, item), "1Password didn't give the code.", OtpFix.TryAgain);
     }
 
     public static async Task<IReadOnlyList<OnePasswordAccount>?> AccountsAsync(string op, CancellationToken ct)
