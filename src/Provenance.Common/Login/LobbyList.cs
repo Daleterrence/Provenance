@@ -1,11 +1,15 @@
 using System.Globalization;
 using Provenance.Common.Hook;
+using Provenance.Common.IO;
 using Provenance.Common.Settings;
+using Serilog;
 
 namespace Provenance.Common.Login;
 
 public static class LobbyList
 {
+    private static readonly HashSet<int> Warned = [];
+
     // the hook writes the game's character list once it's seen it, and the account that game is logged in as takes it
     public static bool Take(ISettingsService settings, Func<IEnumerable<(int Pid, string ProfileId)>>? games = null)
     {
@@ -14,11 +18,32 @@ public static class LobbyList
         foreach (var (pid, profileId) in (games ?? Running)())
         {
             if (!settings.Current.Profiles.Any(a => a.Id == profileId)) continue;
-            if (HookFiles.ReadJson(pid, HookContract.Files.Slots, HookFiles.MaxBytes.Slots, Parse) is not { } list) continue;
-            HookFiles.Delete(pid, HookContract.Files.Slots);
-            settings.SaveChange(s => any |= s.Profiles.FirstOrDefault(a => a.Id == profileId) is { } account && AutoLogin.Listed(account, list));
+            try
+            {
+                var path = HookFiles.PathFor(pid, HookContract.Files.Slots);
+                if (Read(path) is not { } text) continue;
+                if (Parse(text) is { } list)
+                    settings.SaveChange(s => any |= s.Profiles.FirstOrDefault(a => a.Id == profileId) is { } account && AutoLogin.Listed(account, list));
+                // one the hook has written again since stays for the next look
+                if (Read(path) == text) HookFiles.Delete(pid, HookContract.Files.Slots);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                if (Warned.Add(pid)) Log.Warning("The game's character list couldn't be taken up ({Error}: {Message})", e.GetType().Name, e.Message);
+            }
         }
         return any;
+    }
+
+    // null when it isn't there or the hook has it open. One far too long to be a list reads as nothing
+    private static string? Read(string path)
+    {
+        try
+        {
+            var file = new FileInfo(path);
+            return !file.Exists ? null : file.Length > HookFiles.MaxBytes.Slots ? "" : SharedFile.ReadAllText(path);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return null; }
     }
 
     // a line a character: slot, name and world with tabs between. Anything that isn't that and the whole note is refused
@@ -26,7 +51,7 @@ public static class LobbyList
     {
         if (!text.EndsWith('\n')) return null;
         var list = new List<AccountCharacter>();
-        foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var line in text.Replace("\r", "").Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             var part = line.Split('\t');
             if (part.Length != 3 || !int.TryParse(part[0], NumberStyles.None, CultureInfo.InvariantCulture, out int slot) || !AutoLogin.IsSlot(slot)

@@ -5,11 +5,15 @@ using Provenance.Common.Settings;
 
 namespace Provenance.Wpf.ViewModels.Settings;
 
+internal sealed record AutoLoginChoice(string Text, string? Character = null, string? World = null, int? Slot = null);
+
 public sealed partial class AutoLoginRow : ObservableObject
 {
     public required string ProfileId { get; init; }
     public required string Name { get; init; }
     public required IReadOnlyList<string> Choices { get; init; }
+    // what each choice stood for when the page was filled, the account's list can change under it
+    internal IReadOnlyList<AutoLoginChoice> Picks { get; init; } = [];
     public required bool HasCharacters { get; init; }
     public string DropdownName => $"Character for {Name}";
     [ObservableProperty] private int _index;
@@ -52,11 +56,13 @@ public sealed partial class AutoLoginSettings : ObservableObject
         Rows.Clear();
         foreach (var p in s.Profiles)
         {
+            var picks = ChoicesFor(p);
             var row = new AutoLoginRow
             {
                 ProfileId = p.Id,
                 Name = string.IsNullOrWhiteSpace(p.HandleName) ? p.DisplayName : p.HandleName!,
-                Choices = ChoicesFor(p),
+                Choices = picks.Select(c => c.Text).ToList(),
+                Picks = picks,
                 HasCharacters = p.Characters.Count > 0,
                 Index = IndexOf(p),
             };
@@ -66,17 +72,18 @@ public sealed partial class AutoLoginSettings : ObservableObject
         _loading = false;
     }
 
-    private static IEnumerable<string> Shown(Account p) => p.Characters.Select(c => c.World is not null ? $"{c.Name} ({c.World})" : c.Name);
+    private static IEnumerable<AutoLoginChoice> Shown(Account p) =>
+        p.Characters.Select(c => new AutoLoginChoice(c.World is not null ? $"{c.Name} ({c.World})" : c.Name, c.Name, c.World));
 
-    private static string Slot(int n) => $"Slot {n}";
+    private static AutoLoginChoice Slot(int n) => new($"Slot {n}", Slot: n);
 
     private static bool BySlot(Account p) => p.AutoLoginCharacter is null && AutoLogin.IsSlot(p.AutoLoginSlot);
 
     // slots until the characters are known. One chosen before they were stays on the end, as what's chosen
-    private static List<string> ChoicesFor(Account p) =>
-        p.Characters.Count == 0 ? [NoneText, .. Enumerable.Range(1, AutoLogin.Slots).Select(Slot)]
-        : BySlot(p) ? [NoneText, .. Shown(p), Slot(p.AutoLoginSlot!.Value)]
-        : [NoneText, .. Shown(p)];
+    private static List<AutoLoginChoice> ChoicesFor(Account p) =>
+        p.Characters.Count == 0 ? [new(NoneText), .. Enumerable.Range(1, AutoLogin.Slots).Select(Slot)]
+        : BySlot(p) ? [new(NoneText), .. Shown(p), Slot(p.AutoLoginSlot!.Value)]
+        : [new(NoneText), .. Shown(p)];
 
     private static int IndexOf(Account p) =>
         BySlot(p) ? (p.Characters.Count == 0 ? p.AutoLoginSlot!.Value : p.Characters.Count + 1)
@@ -84,15 +91,12 @@ public sealed partial class AutoLoginSettings : ObservableObject
 
     private void Picked(AutoLoginRow row)
     {
-        if (_loading) return;
+        if (_loading || row.Index < 0 || row.Index >= row.Picks.Count) return;
+        var pick = row.Picks[row.Index];
         _settings.SaveChange(s =>
         {
             if (s.Profiles.FirstOrDefault(p => p.Id == row.ProfileId) is not { } p) return;
-            if (p.Characters.Count > 0 && row.Index == p.Characters.Count + 1) return;
-            var pick = row.Index > 0 && row.Index <= p.Characters.Count ? p.Characters[row.Index - 1] : null;
-            p.AutoLoginCharacter = pick?.Name;
-            p.AutoLoginWorld = pick?.World;
-            p.AutoLoginSlot = p.Characters.Count == 0 && AutoLogin.IsSlot(row.Index) ? row.Index : null;
+            (p.AutoLoginCharacter, p.AutoLoginWorld, p.AutoLoginSlot) = (pick.Character, pick.World, pick.Slot);
         });
     }
 }

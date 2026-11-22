@@ -32,11 +32,12 @@ public static class AutoLogin
     // a snapshot with no characters in it leaves what's known alone. POL has no slots, so ones the game's list gave are kept
     public static bool Learn(Account account, PolSocialSnapshot snap)
     {
-        var found = HandleOrder.Listed(snap.ContentIds)
+        var listed = HandleOrder.Listed(snap.ContentIds)
             .Where(c => c.Type == ContentIdType.Ffxi && IsName(c.Name?.Trim()))
             .Select(c => new AccountCharacter(c.Name.Trim(), World(c.Key)))
             .DistinctBy(c => (c.Name.ToLowerInvariant(), c.World?.ToLowerInvariant()))
-            .Select(c => Known(account, c) is { } k ? c with { World = c.World ?? k.World, Slot = k.Slot } : c)
+            .ToList();
+        var found = listed.Select(c => Known(account, c, listed) is { } k ? c with { World = c.World ?? k.World, Slot = k.Slot } : c)
             .OrderBy(c => c.Slot ?? int.MaxValue)
             .ToList();
         return found.Count > 0 && Take(account, found);
@@ -45,16 +46,18 @@ public static class AutoLogin
     // the game's own character list, which is where the slots come from
     public static bool Listed(Account account, IReadOnlyList<AccountCharacter> list)
     {
-        var found = list.Select(c => c.World is null && Known(account, c) is { } k ? c with { World = k.World } : c).OrderBy(c => c.Slot).ToList();
+        var found = list.Select(c => c.World is null && Known(account, c, list) is { } k ? c with { World = k.World } : c).OrderBy(c => c.Slot).ToList();
         return found.Count > 0 && Take(account, found);
     }
 
-    // by name and world, or by name alone when one of the two has no world and nobody shares the name
-    private static AccountCharacter? Known(Account account, AccountCharacter c)
+    private static bool Named(AccountCharacter c, string name) => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase);
+
+    // by name and world, or by name alone when one of the two has no world and nobody on either list shares the name
+    private static AccountCharacter? Known(Account account, AccountCharacter c, IReadOnlyList<AccountCharacter> incoming)
     {
-        var named = account.Characters.Where(k => string.Equals(k.Name, c.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+        var named = account.Characters.Where(k => Named(k, c.Name)).ToList();
         return named.FirstOrDefault(k => string.Equals(k.World, c.World, StringComparison.OrdinalIgnoreCase))
-               ?? (named.Count == 1 && (c.World is null || named[0].World is null) ? named[0] : null);
+               ?? (named.Count == 1 && (c.World is null || named[0].World is null) && incoming.Count(i => Named(i, c.Name)) == 1 ? named[0] : null);
     }
 
     private static bool Take(Account account, List<AccountCharacter> found)
@@ -64,17 +67,13 @@ public static class AutoLogin
         if (!same) account.Characters = found;
         if (account.AutoLoginCharacter is { } chosen && !found.Any(c => Chosen(account, c)))
         {
-            // one saved with no world takes the world of the only character by that name
-            var named = account.AutoLoginWorld is null ? found.Where(c => string.Equals(c.Name, chosen, StringComparison.OrdinalIgnoreCase)).ToList() : [];
+            // the only character by that name is still the one, whatever world it was saved with
+            var named = found.Where(c => Named(c, chosen)).ToList();
             (account.AutoLoginCharacter, account.AutoLoginWorld) = named.Count == 1 ? (named[0].Name, named[0].World) : (null, null);
         }
-        if (account.AutoLoginCharacter is null && IsSlot(account.AutoLoginSlot))
-        {
-            // POL's order isn't the game's, so until the game's list is in only the first slot of a lone character is known for sure
-            var there = found.FirstOrDefault(c => c.Slot == account.AutoLoginSlot)
-                        ?? (account.AutoLoginSlot == 1 && found is [{ Slot: null } only] ? only : null);
-            if (there is not null) (account.AutoLoginCharacter, account.AutoLoginWorld, account.AutoLoginSlot) = (there.Name, there.World, null);
-        }
+        // only the game's list has slots, POL's order isn't the game's
+        if (account.AutoLoginCharacter is null && IsSlot(account.AutoLoginSlot) && found.FirstOrDefault(c => c.Slot == account.AutoLoginSlot) is { } there)
+            (account.AutoLoginCharacter, account.AutoLoginWorld, account.AutoLoginSlot) = (there.Name, there.World, null);
         return !same || before != (account.AutoLoginCharacter, account.AutoLoginWorld, account.AutoLoginSlot);
     }
 

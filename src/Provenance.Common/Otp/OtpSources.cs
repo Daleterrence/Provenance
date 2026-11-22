@@ -73,7 +73,8 @@ public static class OtpSources
     // a leading dash would make the item an option, and settings.json is the user's, so this is checked at the run too
     public static bool StartsWithDash(string item) => item.TrimStart().StartsWith('-');
 
-    private static readonly Regex Colours = new(@"\x1b\[[0-9;]*m"), LogStamp = new(@"^\[ERROR\]\s+\S+\s+\S+\s+"), Address = new(@"\S+@\S+");
+    private static readonly Regex Colours = new(@"\x1b\[[0-9;]*m"), LogStamp = new(@"^\[ERROR\]\s+\S+\s+\S+\s+"), Address = new(@"\S+@\S+"),
+                                  Url = new(@"https?://\S+"), Quoted = new("\"[^\"]+\"");
 
     internal static string ErrorLine(string err)
     {
@@ -81,12 +82,13 @@ public static class OtpSources
         return LogStamp.Replace(line, "");
     }
 
-    // what the tool itself said, for the log: its first line with the item's name and any email address taken out
+    // what the tool itself said, for the log: its first line without the item's name, addresses or anything else it quotes
     internal static string Said(string err, string item)
     {
         var line = ErrorLine(err);
         if (item.Trim() is { Length: > 0 } name) line = line.Replace(name, "<item>", StringComparison.OrdinalIgnoreCase);
-        line = Address.Replace(line, "<email>");
+        line = Address.Replace(Url.Replace(line, "<address>"), "<email>");
+        line = Quoted.Replace(line, m => m.Value == "\"<item>\"" ? m.Value : "\"<name>\"");
         return line.Length > 160 ? line[..160] : line;
     }
 

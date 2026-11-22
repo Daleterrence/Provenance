@@ -73,16 +73,20 @@ public sealed class CharacterNames
 
     public void Remember(string key, KnownCharacter c)
     {
+        var was = Get(key);
+        if (c.Heard.Length == 0 && was is { Heard.Length: > 0 }) c = c with { Heard = was.Heard };
+        if (c == was) return;
         _known[key] = c;
         Save();
     }
 
+    // never a shown name: only the profile says whether that's private
     public bool Learn(string key, string? name)
     {
         if (name is null || !Plain.IsMatch(name)) return false;
         var known = Get(key);
         if (known is { Name.Length: > 0 } || known?.Heard == name) return false;
-        Remember(key, known is null ? new KnownCharacter(name) : known with { Heard = name });
+        Remember(key, (known ?? new KnownCharacter("")) with { Heard = name });
         return true;
     }
 
