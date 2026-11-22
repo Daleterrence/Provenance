@@ -33,8 +33,10 @@ public static partial class UserNames
     {
         string name = found.Groups["name"].Value, kept = name.TrimEnd('.', '\'', ')', ']');
         if (kept.Length == 0) return found.Value;
+        // with no slash or quote to end the name it can be a sentence that carries on after the folder
+        bool sentence = found.Groups["loose"].Success && found.Groups["more"].Success;
         foreach (string nobody in NobodysFolders)
-            if (kept.Equals(nobody, StringComparison.OrdinalIgnoreCase) || kept.StartsWith(nobody + " ", StringComparison.OrdinalIgnoreCase))
+            if (kept.Equals(nobody, StringComparison.OrdinalIgnoreCase) || sentence && kept.StartsWith(nobody + " ", StringComparison.OrdinalIgnoreCase))
                 return found.Value;
         return found.Groups["root"].Value + Hidden + name[kept.Length..];
     }
@@ -45,7 +47,7 @@ public static partial class UserNames
         (?<root>(?:(?<![\w.])[a-z]:|(?<![\w.:\\/])[\\/]{2}[^\\/\s]{1,64})[\\/]{1,2}Users[\\/]{1,2})
         (?:(?<name>[^\\/:*?"<>|\r\n]{1,40}?)(?='(?:[\s.,;)]|\z))
           |(?<name>[^\\/:*?"<>|\s]{1,40}(?:\x20[^\\/:*?"<>|\s]{1,40}){0,2}?)(?=[\\/])
-          |(?<name>[^\\/:*?"<>|\s,;]{1,40}(?:\x20[^\\/:*?"<>|\s,;]{1,40}){0,2}))
+          |(?<name>[^\\/:*?"<>|\s,;]{1,40}(?:\x20[^\\/:*?"<>|\s,;]{1,40}){0,2})(?<loose>)(?:(?=(?<more>[^\r\n])))?)
         """, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.IgnorePatternWhitespace)]
     private static partial Regex InUsers();
 }

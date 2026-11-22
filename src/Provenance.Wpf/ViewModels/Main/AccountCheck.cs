@@ -84,6 +84,7 @@ internal sealed class AccountCheck(IDialogs dialogs, PolSession session, GameLau
             Running = false;
             RunningChanged?.Invoke();
         }
+        if (ct.IsCancellationRequested) return Back;
         switch (AccountCheckRules.Judge(result.Code, result.Refusal))
         {
             case AccountCheckVerdict.Accepted:

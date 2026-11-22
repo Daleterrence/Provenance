@@ -37,8 +37,9 @@ $run = [guid]::NewGuid().ToString('N')
 $zip = Join-Path ([IO.Path]::GetTempPath()) "provenance-assets-$run.zip"
 $fresh = "$dir.$run"
 try {
+    if ("$($pin.url)" -notmatch '^https://') { throw "tools\assets.json names $($pin.url), which isn't an https:// address, so nothing was downloaded." }
     Write-Host "Downloading Provenance's images from $($pin.url)"
-    Invoke-WebRequest -Uri $pin.url -OutFile $zip -UseBasicParsing
+    Invoke-WebRequest -Uri $pin.url -OutFile $zip -UseBasicParsing -TimeoutSec 300
     $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
     if ($hash -cne $pin.sha256) {
         throw "The download isn't the file tools\assets.json names (its SHA-256 is $hash), so nothing was unpacked."

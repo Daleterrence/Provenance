@@ -624,6 +624,7 @@ public partial class MainViewModel : ObservableObject
         if (StartsAllAtOpen(autoLoginSuppressed))
         {
             _launch.DropAhead();
+            if (!GameInstalled) return;
             Log.Information("Starting all accounts automatically");
             Multi.StartAllAccountsCommand.Execute(null);
             return;

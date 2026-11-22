@@ -421,6 +421,8 @@ public sealed class ChatStore
 
     public event Action? Saved;
 
+    internal object IoLock => _io;
+
     internal int Version => _version;
     internal int SavedVersion => Volatile.Read(ref _savedVersion);
 
@@ -430,8 +432,13 @@ public sealed class ChatStore
         {
             if (_journal is { Leftover: true } && !_closed && now - _triedAt >= SaveRetry)
             {
-                _triedAt = now;
-                lock (_io) _journal.Tidy();
+                if (!Monitor.TryEnter(_io)) return;
+                try
+                {
+                    _triedAt = now;
+                    _journal.Tidy();
+                }
+                finally { Monitor.Exit(_io); }
             }
             return;
         }
