@@ -204,9 +204,9 @@ public partial class AccountsViewModel : ObservableObject
 
     private Account NewProfile(AccountDialogResult r)
     {
-        string name = "New account";
+        string masked = AccountRules.MaskedId(r.PolId), name = masked;
         for (int n = 2; Profiles.Any(p => string.Equals(p.DisplayName, name, StringComparison.Ordinal)); n++)
-            name = $"New account {n}";
+            name = $"{masked} {n}";
         return new Account { DisplayName = name, UseOtp = r.UseOtp, OtpSource = r.OtpSource, OtpItem = r.OtpItem, OtpAccount = r.OtpAccount };
     }
 

@@ -87,7 +87,7 @@ public sealed partial class AccountFormViewModel : ObservableObject
         _required = !edit || requireAll;
         _savedAccount = otpAccount;
         Header = !edit ? "Add account"
-               : string.IsNullOrWhiteSpace(accountName) || accountName.StartsWith("New account", StringComparison.Ordinal)
+               : string.IsNullOrWhiteSpace(accountName) || AccountRules.IsPlaceholderName(accountName)
                    ? "Edit account" : $"Edit {accountName}";
         AgainVisible = requireAll;
         DetailsSaved = edit && !requireAll;

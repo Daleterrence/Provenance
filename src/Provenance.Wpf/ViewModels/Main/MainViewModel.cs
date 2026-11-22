@@ -810,7 +810,7 @@ public partial class MainViewModel : ObservableObject
         else StartSocial(profile.Id);
         Accounts.SessionProfileId = profile.Id;
         SetPhase(SessionPhase.LoggingIn);
-        var token = BeginCancellable(Accounts.ProfileTitle.StartsWith("New account", StringComparison.Ordinal)
+        var token = BeginCancellable(AccountRules.IsPlaceholderName(Accounts.ProfileTitle)
             ? "Logging in to PlayOnline" : "Logging in to " + Accounts.ProfileTitle, "Starting PlayOnline...");
         bool startAfter = false, loggedIn = false, gameRan = false;
         string? lastFailure = null;

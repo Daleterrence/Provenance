@@ -35,6 +35,17 @@ public static class AccountRules
         || r.PolPassword.Length > 0 || r.SeaPassword.Length > 0
         || r.UseOtp != useOtp || r.OtpSource != otpSource || r.OtpItem != otpItem || r.OtpAccount != otpAccount;
 
+    public static string MaskedId(string polId) => polId.Length <= 2 ? polId : polId[..2] + new string('*', polId.Length - 2);
+
+    public static bool IsPlaceholderName(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return false;
+        if (name.StartsWith("New account", StringComparison.Ordinal)) return true;
+        if (name.Length < 3 || name[2] != '*') return false;
+        var rest = name.AsSpan(2).TrimStart('*');
+        return rest.IsEmpty || (rest.Length > 1 && rest[0] == ' ' && rest[1..].IndexOfAnyExceptInRange('0', '9') < 0);
+    }
+
     public static AccountDialogResult WithoutPasswords(AccountDialogResult typed) =>
         typed with { PolPassword = "", SeaPassword = "" };
 
