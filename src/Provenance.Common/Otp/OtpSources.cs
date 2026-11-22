@@ -75,9 +75,10 @@ public static class OtpSources
 
     private static readonly Regex Colours = new(@"\x1b\[[0-9;]*m"), LogStamp = new(@"^\[ERROR\]\s+\S+\s+\S+\s+"), Address = new(@"\S+@\S+"),
                                   Url = new(@"https?://\S+"), Quoted = new("\"[^\"]+\"|(?<![\\w'])'[^']+'(?![\\w'])"),
-                                  Folder = new(@"(?<!\w)(?:[A-Za-z]:[\\/]|\\\\)(?:(?![A-Za-z]:[\\/])[^""<>|?*:\r\n])*"),
-                                  Host = new(@"(?<![\w-])(?:[\w-]+\.)+[\w-]+(?::\d+)?"), Lookup = new(@"\b(getaddrinfo \w+ )[\w.-]+"),
-                                  Port = new(@"(?<![\w.:-])(?=[\w-]*[A-Za-z])[\w-]+:\d{2,5}(?![\w.:])");
+                                  Folder = new(@"(?<!\w)(?:[A-Za-z]:[\\/]|\\\\)(?:(?![A-Za-z]:[\\/]|\x20E(?:NOENT|ACCES|PERM|BUSY|NOTDIR|INVAL|MFILE|NOMEM)\s*$)[^""<>|?*:\r\n])*"),
+                                  Host = new(@"(?<![\w-])(?:[\w-]+\.)+[\w-]+(?::\d+)?"), Lookup = new(@"\b(getaddrinfo \w+ |Host: )[\w.-]+"),
+                                  Port = new(@"(?<![\w.:-])(?=[\w-]*[A-Za-z])[\w-]+:\d{2,5}(?![\w.:])"),
+                                  Ip6 = new(@"(?<![\w.])(?<![0-9A-Fa-f:]:)\[?(?=[0-9A-Fa-f:]*::|(?:[0-9A-Fa-f]{1,4}:){7})[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,8}(?:%[^\s\]]+)?\]?(?::\d+)?(?![\w:])");
 
     internal static string ErrorLine(string err)
     {
@@ -93,9 +94,10 @@ public static class OtpSources
             line = Regex.Replace(line, $@"(?<!\w){Regex.Escape(name)}(?!\w)", "<item>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         line = Quoted.Replace(line, m => m.Value[1..^1] == "<item>" ? m.Value : $"{m.Value[0]}<name>{m.Value[0]}");
         line = Address.Replace(Url.Replace(line, "<address>"), "<email>");
-        // a path can have spaces in it, so it takes the rest of the line up to something a path can't have
+        // a path can have spaces in it, so it runs to something a path can't hold, or to the error code Node ends the line with
         line = Folder.Replace(line, m => "<path>" + m.Value[m.Value.TrimEnd().Length..]);
-        line = Port.Replace(Host.Replace(Lookup.Replace(line, "$1<address>"), "<address>"), "<address>");
+        line = Lookup.Replace(Ip6.Replace(line, "<address>"), "$1<address>");
+        line = Port.Replace(Host.Replace(line, "<address>"), "<address>");
         return line.Length > 160 ? line[..160] : line;
     }
 
