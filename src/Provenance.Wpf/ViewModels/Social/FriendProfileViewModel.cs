@@ -62,7 +62,7 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         }
         if (_social.GameRunning)
         {
-            Note.Show(SocialViewModel.GameRunningNote);
+            Note.Show(GameOffText.Profiles);
             return;
         }
         if (f.Key.Length > 0 && _login.ProfileCache.TryGetValue(f.Key, out var hit) &&
@@ -230,7 +230,7 @@ public sealed partial class FriendProfileViewModel : ObservableObject
         }
         if (_social.GameRunning)
         {
-            Note.Show(SocialViewModel.GameRunningNote);
+            Note.Show(GameOffText.Profiles);
             return;
         }
         if (_social.Session.Pid is not { } pid) return;

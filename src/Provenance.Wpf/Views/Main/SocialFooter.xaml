@@ -22,9 +22,6 @@
                           IsEnabled="{Binding Social.StatusEditable}"
                           ItemsSource="{Binding Social.StatusItems}" SelectedIndex="{Binding Social.MyStatusIndex}" />
             </StackPanel>
-            <TextBlock Grid.Column="1" Margin="16,0" VerticalAlignment="Center" FontSize="12" TextTrimming="CharacterEllipsis"
-                       Foreground="{DynamicResource Text.3}" Text="Handles, status, chat rooms and groups aren't available while you're in the game."
-                       Visibility="{Binding Social.GameFeedLive, Converter={StaticResource BoolToVis}}" />
             <Grid Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center"
                   Visibility="{Binding GameOpen, Converter={StaticResource InvertBoolToVis}}">
                 <ProgressBar Width="14" Height="14" Margin="18,0,0,0"
@@ -42,14 +39,16 @@
                             <Setter Property="FontSize" Value="12" />
                         </Style>
                     </UniformGrid.Resources>
-                    <Button Command="{Binding ToggleChatRoomsCommand}" ToolTip="Access PlayOnline's chat rooms" AutomationProperties.Name="Chat rooms"
+                    <Button Command="{Binding ToggleChatRoomsCommand}" ToolTip="{Binding ChatRoomsTip}" ToolTipService.ShowOnDisabled="True"
+                            AutomationProperties.Name="Chat rooms"
                             IsEnabled="{Binding GameOpen, Converter={StaticResource InvertBool}}">
                         <StackPanel Orientation="Horizontal">
                             <controls:SvgIcon Glyph="bubble" IsOpen="{Binding ChatRoomsOpen}" />
                             <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="CHAT ROOMS" />
                         </StackPanel>
                     </Button>
-                    <Button Command="{Binding ToggleGroupsCommand}" ToolTip="Displays your PlayOnline group chats" AutomationProperties.Name="Groups"
+                    <Button Command="{Binding ToggleGroupsCommand}" ToolTip="{Binding GroupsTip}" ToolTipService.ShowOnDisabled="True"
+                            AutomationProperties.Name="Groups"
                             IsEnabled="{Binding GameOpen, Converter={StaticResource InvertBool}}">
                         <StackPanel Orientation="Horizontal">
                             <controls:SvgIcon Glyph="groupchat2" IsOpen="{Binding Social.GroupsWindowVisible}" />
@@ -57,7 +56,7 @@
                         </StackPanel>
                     </Button>
                     <Button Command="{Binding ToggleFriendsCommand}" ToolTip="Displays your PlayOnline friends list" AutomationProperties.Name="Friends"
-                            IsEnabled="{Binding FriendsLocked, Converter={StaticResource InvertBool}}">
+                            IsEnabled="{Binding FriendsWaiting, Converter={StaticResource InvertBool}}">
                         <StackPanel Orientation="Horizontal">
                             <controls:SvgIcon Glyph="chat" IsOpen="{Binding Social.FriendsTabVisible}" />
                             <TextBlock Margin="5,0,0,0" VerticalAlignment="Center" Text="FRIENDS" />

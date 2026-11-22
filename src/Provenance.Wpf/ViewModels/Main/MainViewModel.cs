@@ -130,14 +130,9 @@ public partial class MainViewModel : ObservableObject
             Social.TickZones();
             Social.CheckGameFeed();
         };
-        Social.GameFeedLost += () =>
-        {
-            _windows.CloseFriendsWindows();
-            RaiseGameFriends();
-        };
         Social.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(SocialViewModel.GameFeedLive)) RaiseGameFriends();
+            if (e.PropertyName is nameof(SocialViewModel.FriendsLocked) or nameof(SocialViewModel.GameFeedFault)) RaiseGameFriends();
         };
         Accounts.MessagesEnding = Social.StopKeeping;
 
@@ -266,7 +261,9 @@ public partial class MainViewModel : ObservableObject
         }
         if (gameOpenChanged)
         {
-            foreach (var name in new[] { nameof(GameOpen), nameof(PlayText), nameof(PlayName), nameof(PlayEnabled) }) OnPropertyChanged(name);
+            foreach (var name in new[] { nameof(GameOpen), nameof(PlayText), nameof(PlayName), nameof(PlayEnabled), nameof(ChatRoomsTip), nameof(GroupsTip),
+                                         nameof(AccountsTip) })
+                OnPropertyChanged(name);
             RaiseGameFriends();
         }
     }
@@ -511,17 +508,17 @@ public partial class MainViewModel : ObservableObject
     public bool ShowLaunchCard => IsLaunching && !GameUp;
 
     public bool GameOpen => Session.Phase == SessionPhase.InGame;
-    public bool FriendsLocked => GameOpen && !Social.GameFeedLive;
-    public const string GameLockedBanner = "You cannot use any PlayOnline or social features of Provenance whilst logged into the game.";
-    public const string GameFriendsBanner =
-        "Your friends list keeps updating whilst you're in the game. Handles, chat rooms, group chat, sending messages, changing your " +
-        "status and answering friend requests or group invitations aren't available until you close the game.";
-    public string GameBanner => Social.GameFeedLive ? GameFriendsBanner : GameLockedBanner;
+    public bool FriendsLocked => Social.FriendsLocked;
+    // a fault still opens the Friends window, which says what went wrong
+    public bool FriendsWaiting => FriendsLocked && !Social.GameFeedFault;
+    public string ChatRoomsTip => GameOpen ? GameOffText.ChatRooms : "Access PlayOnline's chat rooms";
+    public string GroupsTip => GameOpen ? GameOffText.GroupChats : "Displays your PlayOnline group chats";
+    public string? AccountsTip => GameOpen ? GameOffText.Accounts : null;
 
     private void RaiseGameFriends()
     {
         OnPropertyChanged(nameof(FriendsLocked));
-        OnPropertyChanged(nameof(GameBanner));
+        OnPropertyChanged(nameof(FriendsWaiting));
     }
 
     public string PlayText => GameOpen ? "GAME OPEN" : "PLAY";
@@ -694,6 +691,7 @@ public partial class MainViewModel : ObservableObject
             OpenSocial();
             return;
         }
+        if (FriendsLocked) return;
         if (notice.Sender is { } who && Social.Friends.FirstOrDefault(f => f.Name == who) is { } f) OpenChatWith(f);
         else OpenSocial();
     }
@@ -702,7 +700,7 @@ public partial class MainViewModel : ObservableObject
 
     internal void OpenSocial()
     {
-        if (Multi.Running || FriendsLocked) return;
+        if (Multi.Running || FriendsWaiting) return;
         _windows.ShowFriends(Social);
     }
 
@@ -715,7 +713,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ToggleFriends()
     {
-        if (Multi.Running || FriendsLocked) return;
+        if (Multi.Running || FriendsWaiting) return;
         if (!_windows.CloseIfShown(SecondWindow.Friends)) OpenSocial();
     }
 

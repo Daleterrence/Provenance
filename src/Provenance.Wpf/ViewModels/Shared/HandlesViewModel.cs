@@ -70,13 +70,18 @@ public partial class HandlesViewModel : ObservableObject
     public ObservableCollection<HandleCharacterRow> Unlinked { get; } = new();
 
     [ObservableProperty, NotifyPropertyChangedFor(nameof(Editable), nameof(CanCreate))] private bool _loggedIn;
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(ReadOnly), nameof(Editable), nameof(CanCreate))] private string? _readOnlyText;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ReadOnly), nameof(Editable), nameof(CanCreate), nameof(OffForGame), nameof(ReadOnlyLineShown), nameof(OffTip))]
+    private string? _readOnlyText;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(Editable), nameof(CanCreate), nameof(Ordering))] private bool _busy;
     public StatusLine Note { get; } = new();
     private bool _open, _noteSeen;
     [ObservableProperty] private bool _hasUnlinked;
 
     public bool ReadOnly => ReadOnlyText != null;
+    public bool OffForGame => ReadOnlyText == HandleList.ReadOnlyText;
+    public bool ReadOnlyLineShown => ReadOnly && !OffForGame;
+    public string? OffTip => OffForGame ? ReadOnlyText : null;
     public bool Editable => LoggedIn && !ReadOnly && !Busy;
     private bool CanChange => Editable && _draft is null;
     public bool CanCreate => CanChange;

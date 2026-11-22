@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Provenance.Wpf.Controls">
     <Button Width="28" Height="28" Margin="4,0,0,0" Padding="0" Style="{StaticResource IconButton}" Command="{Binding ToggleProfileEditorCommand}"
-            ToolTip="Edit your PlayOnline profile" AutomationProperties.Name="Edit your PlayOnline profile"
+            ToolTip="{Binding EditProfileTip}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="Edit your PlayOnline profile"
             PreviewMouseLeftButtonDown="OnPress">
         <controls:SvgIcon Glyph="card" Width="28" Height="28" />
     </Button>

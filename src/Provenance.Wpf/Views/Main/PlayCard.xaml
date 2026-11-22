@@ -3,8 +3,9 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:Provenance.Wpf.Controls"
              xmlns:socialViews="clr-namespace:Provenance.Wpf.Views.Social">
-    <Grid Margin="14,14,14,18" RowDefinitions="*,Auto">
-        <DockPanel IsEnabled="{Binding FriendsLocked, Converter={StaticResource InvertBool}}" Style="{StaticResource DimWhenOff}">
+    <Grid Margin="14,14,14,18" RowDefinitions="Auto,*,Auto">
+        <socialViews:FeedFaultBanner Margin="8,0,4,10" Visibility="{Binding Social.GameFeedFault, Converter={StaticResource BoolToVis}}" />
+        <DockPanel Grid.Row="1" IsEnabled="{Binding FriendsLocked, Converter={StaticResource InvertBool}}" Style="{StaticResource DimWhenOff}">
             <TextBlock DockPanel.Dock="Top" Margin="8,0,4,8" FontSize="15" FontWeight="SemiBold" TextTrimming="CharacterEllipsis">
                 <Run Text="Friends" /><Run Text="   " /><Run Text="{Binding Social.Summary, Mode=OneWay}" FontSize="12" FontWeight="Normal" Foreground="{DynamicResource Text.3}" />
             </TextBlock>
@@ -12,7 +13,7 @@
                                            Active="{Binding Social.ZoneTrouble}" />
             <socialViews:FriendsList x:Name="FriendList" DataContext="{Binding Social}" OwnSelection="True" FriendActivated="OnFriendActivated" />
         </DockPanel>
-        <StackPanel Grid.Row="1" Margin="8,10,8,0">
+        <StackPanel Grid.Row="2" Margin="8,10,8,0">
             <Border Height="1" Margin="-22,0,-22,16" Background="{DynamicResource Border.Pane}" />
             <TextBlock Margin="0,0,0,8" TextWrapping="Wrap" TextAlignment="Center" FontSize="12"
                        Foreground="{DynamicResource State.Down}" Text="{Binding Social.PlayBlockedReason}"

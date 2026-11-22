@@ -38,7 +38,8 @@
                 </StackPanel>
             </Grid>
             <Button Style="{StaticResource PolButton}" Padding="8,0" Height="26" FontSize="12" HorizontalAlignment="Right" Margin="0,0,0,10"
-                    Command="{Binding OpenAccountsCommand}" Content="MANAGE ACCOUNTS" />
+                    Command="{Binding OpenAccountsCommand}" Content="MANAGE ACCOUNTS"
+                    ToolTip="{Binding AccountsTip}" ToolTipService.ShowOnDisabled="True" />
 
             <CheckBox Content="This account uses a one-time password" FontSize="13" Margin="0,0,0,10"
                       Foreground="{DynamicResource Text.2}" IsChecked="{Binding Accounts.UseOtp}"

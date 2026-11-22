@@ -45,7 +45,7 @@ public static class HandleList
 
     public const string LimitText = HookFailures.Handles.LimitText;
     public const string LoggedOutText = "You're not logged in. Log in to see your handles and the characters linked to them.";
-    public const string ReadOnlyText = "Handles can't be changed while FINAL FANTASY XI is starting or running.";
+    public const string ReadOnlyText = "You cannot manage handles whilst FINAL FANTASY XI is running.";
     public const string MultiRunText = "Handles can't be changed while Provenance is starting your accounts.";
     public const string NoTargetText = "There's no other handle to link it to.";
     public const string GameStartedText = "Provenance couldn't confirm the change before the game started.";

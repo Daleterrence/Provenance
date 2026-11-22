@@ -291,23 +291,23 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     public bool GameRunning => _session.GameRunning;
     public const string GameRunningNote = "That isn't available while you're in the game.";
-    public const string GameLine =
-        "While you're in the game you can read your friends and messages here. Sending messages, changing your status or friends " +
-        "list and answering requests aren't available until you close the game.";
+    public const string GameFeedFaultText =
+        "Something went wrong connecting to the in-game friend list. You cannot use Provenance to access your friend list this session.";
 
     private LastRaised _gameRunningShown;
 
     // the hook's friends sampler is running and its snapshots are coming in, so the list is up to date in the game
-    [ObservableProperty, NotifyPropertyChangedFor(nameof(GameLineText))] private bool _gameFeedLive;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(FriendsLocked), nameof(GameFeedFault))] private bool _gameFeedLive;
     private bool _gameFeedExpected;
     private DateTime _gameBegan, _gameFeedAt;
     // the hook's first snapshot comes after its Play writes are done, then one every few seconds whether or not anything changed
     internal static readonly TimeSpan GameFeedGrace = TimeSpan.FromSeconds(45);
     internal static readonly TimeSpan GameFeedStale = TimeSpan.FromSeconds(20);
-    // the feed was there, or the hold said it would be, and now it's stopped or never came
-    public event Action? GameFeedLost;
-    public string? GameLineText => GameRunning && GameFeedLive ? GameLine : null;
+    public bool FriendsLocked => _session.Phase == SessionPhase.InGame && !GameFeedLive;
+    // locked and not just waiting on the hook's first snapshot
+    public bool GameFeedFault => FriendsLocked && !_gameFeedExpected;
     public bool CanOpenEditor => LoggedIn && !GameRunning;
+    public string EditProfileTip => GameRunning ? GameOffText.EditProfile : "Edit your PlayOnline profile";
 
     // the game's starting. expected is what the hold's last snapshot said about the sampler
     internal void GameBegan(bool expected)
@@ -315,20 +315,27 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         _gameFeedExpected = expected;
         _gameBegan = Now;
         GameFeedLive = false;
+        RaiseFriendsLocked();
+    }
+
+    private void RaiseFriendsLocked()
+    {
+        OnPropertyChanged(nameof(FriendsLocked));
+        OnPropertyChanged(nameof(GameFeedFault));
     }
 
     internal void GameEnded()
     {
         _gameFeedExpected = false;
         GameFeedLive = false;
+        RaiseFriendsLocked();
     }
 
     private void LoseGameFeed()
     {
-        bool had = GameFeedLive || _gameFeedExpected;
         _gameFeedExpected = false;
         GameFeedLive = false;
-        if (had) GameFeedLost?.Invoke();
+        RaiseFriendsLocked();
     }
 
     // on the main window's timer: a feed that's gone quiet, or one that never started, is a lost one
@@ -395,12 +402,13 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         {
             foreach (var c in Conversations.ToList()) c.StateChanged();
             OnPropertyChanged(nameof(GameRunning));
-            OnPropertyChanged(nameof(GameLineText));
+            OnPropertyChanged(nameof(EditProfileTip));
             OnPropertyChanged(nameof(CanOpenEditor));
             OnPropertyChanged(nameof(StatusEditable));
         }
         OnPropertyChanged(nameof(CanGroupChat));
         OnPropertyChanged(nameof(CanEdit));
+        RaiseFriendsLocked();
     }
 
     public bool FriendsTabVisible => FriendsListVisible;
@@ -1289,7 +1297,10 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
                 if (openConversation is not null) openConversation(f);
                 else OpenConversation(f);
             }),
-            new("View profile", f.IsFriend && !f.Pending, () => _windows.ShowProfile(this, f)),
+            new("View profile", f.IsFriend && !f.Pending && !GameRunning, () => _windows.ShowProfile(this, f))
+            {
+                Tip = GameRunning ? GameOffText.Profiles : null,
+            },
         };
         var inviteTo = Groups.Items.Where(g => g.CanInvite && !g.Members.Any(m => m.Key.Length > 0 && m.Key == f.Key)).ToList();
         if (inviteTo.Count > 0 && f.IsFriend && !f.Pending && !f.IsMe)
