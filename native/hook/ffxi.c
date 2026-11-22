@@ -621,6 +621,13 @@ static void fx_answer_start(BYTE *b)
     fx_answer_say(g_fx_red, g_fx_not_answered);
 }
 
+static void fx_answer_went(const char *how)
+{
+    fx_req_drop(&g_fx.want);
+    base_log("ffxi: a friend request was %s%s\r\n", g_fx.want_yes ? "accepted" : "declined", how);
+    fx_answer_say(g_fx_note, g_fx.want_yes ? "You accepted the friend request." : "You declined the friend request.");
+}
+
 /* the callback only leaves its code, the lines are printed from here */
 static void fx_answer_pump(BYTE *b)
 {
@@ -635,15 +642,17 @@ static void fx_answer_pump(BYTE *b)
         fx_answer_start(b);
     }
     /* a reply that comes after the 30s has no tag to tell it from the next answer's, so nothing new starts till it has */
-    if (g_fx.ans_state == FX_ANS_LATE && (g_fx.off || g_fx.ans_done || GetTickCount64() - g_fx.ans_at >= FX_ANSWER_LATE_MS)) fx_answer_end();
+    if (g_fx.ans_state == FX_ANS_LATE && (g_fx.off || g_fx.ans_done || GetTickCount64() - g_fx.ans_at >= FX_ANSWER_LATE_MS)) {
+        int went = g_fx.ans_done && !g_fx.ans_code && !g_fx.off;
+        fx_answer_end();
+        if (went) fx_answer_went(", the reply came late");
+    }
     if (g_fx.ans_state != FX_ANS_RUNNING) return;
     if (g_fx.ans_done) {
         code = (int)g_fx.ans_code;
         fx_answer_end();
         if (!code) {
-            fx_req_drop(&g_fx.want);
-            base_log("ffxi: a friend request was %s\r\n", g_fx.want_yes ? "accepted" : "declined");
-            fx_answer_say(g_fx_note, g_fx.want_yes ? "You accepted the friend request." : "You declined the friend request.");
+            fx_answer_went("");
         } else {
             base_log("ffxi: a friend request answer failed (%d)\r\n", code);
             fx_answer_say(g_fx_red, g_fx_not_answered);
@@ -879,7 +888,6 @@ static void fx_unpatch(void)
     if (!g_fx.patched) {
         /* a patch that faulted part way has only the count call repointed */
         if (g_fx.count) fx_restore(AT_FX_COUNT_CALL, (void *)fx_count, g_fx.count_was);
-        g_fx.count = NULL;
         return;
     }
     if (g_fx.commands && g_fx.job < 0 && !g_fx.msg && !g_fx.nsends && !g_fx.unsent && g_fx.ans_state == FX_ANS_NONE) {

@@ -98,7 +98,11 @@ static int lb_have(const int *ids, int n)
     return 1;
 }
 
-static int lb_alone(void) { return g_ig.lobby_only || g_ig.off; }
+/* after a fault the sampler's thread may still be mid look, two at once could read a half filled table */
+static int lb_alone(void)
+{
+    return g_ig.lobby_only || (g_ig.off && (!g_ig.thread || WaitForSingleObject(g_ig.thread, 0) == WAIT_OBJECT_0));
+}
 
 /* in a game with no friends list nothing else looks at FFXiMain, so this does */
 static void lb_look(ULONGLONG now)
@@ -116,7 +120,7 @@ static void lb_look(ULONGLONG now)
 /* whether the looking for FFXiMain's addresses is over, so a missing one is missing for good */
 static int lb_looked(void)
 {
-    return lb_alone() ? g_lb.tried >= FX_TRIES : g_fx.found || g_fx.tries >= FX_TRIES;
+    return g_lb.tried >= FX_TRIES || g_fx.found || g_fx.tries >= FX_TRIES;
 }
 
 static int lb_kind(const char *name)

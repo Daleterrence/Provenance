@@ -37,7 +37,7 @@ static struct {
     ig_copy shared, scratch, written;
     DWORD beat;
     DWORD code, at;
-    int said, lobby_only;
+    int said, lobby_only, game_faults;
 } g_ig;
 
 static void ig_copy_read(BYTE *b, ig_copy *c)
@@ -110,11 +110,16 @@ static void ig_write_off(void)
     jw_free(&w);
 }
 
-static void ig_fault(const char *where)
+static void ig_fault(const char *where, int game)
 {
-    /* a second one and the hook is off the game's thread for good */
-    if (InterlockedExchange(&g_ig.off, 1)) {
+    LONG was = InterlockedExchange(&g_ig.off, 1);
+    /* a second one on the game's thread and the hook is off it for good. One from another thread only ends that thread */
+    if (game && g_ig.game_faults++) {
         ig_disarm();
+        return;
+    }
+    if (was) {
+        base_log("ingame: fault %08x at %08x in the %s as well\r\n", g_ig.code, g_ig.at, where);
         return;
     }
     fx_stop();
@@ -163,7 +168,7 @@ static void __cdecl ig_poll(int unused)
     __try {
         ig_tick();
     } __except (ig_filter(GetExceptionInformation())) {
-        ig_fault("game thread");
+        ig_fault("game thread", 1);
     }
     fx_poll(g_ig.b);
     /* with the friends list off it's only here for the chat's calls to go back and for the lobby */
@@ -194,7 +199,7 @@ static DWORD WINAPI ig_worker(void *unused)
                 __try {
                     ok = ig_flush();
                 } __except (ig_filter(GetExceptionInformation())) {
-                    ig_fault("worker");
+                    ig_fault("worker", 0);
                 }
             }
             fx_worker(g_ig.b);
@@ -269,9 +274,9 @@ static void ingame_start(BYTE *b)
         g_ig.thread = CreateThread(NULL, 0, ig_worker, NULL, 0, NULL);
         if (!g_ig.thread) {
             g_ig.code = GetLastError();
-            ig_fault("start");
+            ig_fault("start", 0);
         }
     } __except (ig_filter(GetExceptionInformation())) {
-        ig_fault("start");
+        ig_fault("start", 0);
     }
 }
