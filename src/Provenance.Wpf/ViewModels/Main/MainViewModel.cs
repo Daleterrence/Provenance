@@ -261,8 +261,7 @@ public partial class MainViewModel : ObservableObject
         }
         if (gameOpenChanged)
         {
-            foreach (var name in new[] { nameof(GameOpen), nameof(PlayText), nameof(PlayName), nameof(PlayEnabled), nameof(ChatRoomsTip), nameof(GroupsTip),
-                                         nameof(AccountsTip) })
+            foreach (var name in new[] { nameof(GameOpen), nameof(PlayText), nameof(PlayName), nameof(PlayEnabled), nameof(ChatRoomsTip), nameof(GroupsTip) })
                 OnPropertyChanged(name);
             RaiseGameFriends();
         }
@@ -513,7 +512,6 @@ public partial class MainViewModel : ObservableObject
     public bool FriendsWaiting => FriendsLocked && !Social.GameFeedFault;
     public string ChatRoomsTip => GameOpen ? GameOffText.ChatRooms : "Access PlayOnline's chat rooms";
     public string GroupsTip => GameOpen ? GameOffText.GroupChats : "Displays your PlayOnline group chats";
-    public string? AccountsTip => GameOpen ? GameOffText.Accounts : null;
 
     private void RaiseGameFriends()
     {
@@ -931,7 +929,7 @@ public partial class MainViewModel : ObservableObject
         Social.HandleSwitching = Handles.Switching;
     }
 
-    private bool CanOpenAccounts() => !Multi.Running && !GameOpen;
+    private bool CanOpenAccounts() => !Multi.Running;
 
     [RelayCommand(CanExecute = nameof(CanOpenAccounts))]
     private void OpenAccounts()
