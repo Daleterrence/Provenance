@@ -11,13 +11,14 @@ namespace Provenance.Wpf.Services;
 
 public sealed class AvatarService(ISettingsService settings, Func<string, ProfilePictureCatalog.Catalog?>? catalog = null,
                                   string? extrasDir = null, Action<string>? needExtras = null,
-                                  Func<string, ProfilePictureCrop>? cropOf = null)
+                                  Func<string, ProfilePictureCrop>? cropOf = null, Func<int, ProfilePictureAsset?>? assetOf = null)
 {
     private readonly string _extras = extrasDir ?? ProfilePictureExtras.Folder;
     private string? _viewerDir;
     private ProfilePictureCatalog.Catalog? _offered;
     private int _offeredGeneration = -1;
     private bool _askedForExtras;
+    private readonly HashSet<int> _unkeyed = [];
     private readonly object _lock = new();
     private readonly Dictionary<int, ImageSource?> _cache = new();
     private readonly Dictionary<int, BitmapSource?> _sheets = new();
@@ -66,6 +67,8 @@ public sealed class AvatarService(ISettingsService settings, Func<string, Profil
                 _offered = loaded;
                 _offeredGeneration = generation;
                 foreach (var gone in _cache.Where(kv => kv.Value is null).Select(kv => kv.Key).ToList()) _cache.Remove(gone);
+                foreach (var gone in _unkeyed) _cache.Remove(gone);
+                _unkeyed.Clear();
                 foreach (var gone in _sheets.Where(kv => kv.Value is null).Select(kv => kv.Key).ToList()) _sheets.Remove(gone);
             }
         }
@@ -102,19 +105,39 @@ public sealed class AvatarService(ISettingsService settings, Func<string, Profil
         ImageSource? img = null;
         try
         {
-            var (x, y, w, h) = ProfilePictureSheets.Cell(picId);
-            var sheet = LoadSheet(ProfilePictureSheets.SheetOf(picId));
-            if (sheet != null && x + w <= sheet.PixelWidth && y + h <= sheet.PixelHeight)
+            var circle = setKey is null ? ProfilePictureCrop.Default : (cropOf ?? (k => ProfilePictureCrop.For(k)))(setKey);
+            if ((assetOf ?? ProfilePictureAssets.Find)(picId) is { } asset)
+                img = Circle(asset.Image, asset.Meta.X0, asset.Meta.Y0, asset.Meta.Scale, circle);
+            else
             {
-                var crop = new CroppedBitmap(sheet, new Int32Rect(x, y, w, h));
-                crop.Freeze();
-                ProfilePictureCrops.Attach(crop, setKey is null ? ProfilePictureCrop.Default : (cropOf ?? (k => ProfilePictureCrop.For(k)))(setKey));
-                img = crop;
+                var (x, y, w, h) = ProfilePictureSheets.Cell(picId);
+                var sheet = LoadSheet(ProfilePictureSheets.SheetOf(picId));
+                if (sheet != null && x + w <= sheet.PixelWidth && y + h <= sheet.PixelHeight)
+                    img = Circle(new CroppedBitmap(sheet, new Int32Rect(x, y, w, h)), 0, 0, 1, circle);
             }
         }
         catch { }
-        lock (_lock) _cache[picId] = img;
+        lock (_lock)
+        {
+            _cache[picId] = img;
+            if (setKey is null) _unkeyed.Add(picId);
+            else _unkeyed.Remove(picId);
+        }
         return img;
+    }
+
+    private static ImageSource? Circle(BitmapSource image, double x0, double y0, double scale, ProfilePictureCrop circle)
+    {
+        var cover = circle.Within(x0, y0, image.PixelWidth / scale, image.PixelHeight / scale);
+        if (cover is null) return null;
+        int x = (int)Math.Round((cover.X - x0) * scale), y = (int)Math.Round((cover.Y - y0) * scale);
+        int size = Math.Max(1, (int)Math.Round(cover.Size * scale));
+        x = Math.Clamp(x, 0, image.PixelWidth - 1);
+        y = Math.Clamp(y, 0, image.PixelHeight - 1);
+        size = Math.Min(size, Math.Min(image.PixelWidth - x, image.PixelHeight - y));
+        var crop = new CroppedBitmap(image, new Int32Rect(x, y, size, size));
+        crop.Freeze();
+        return crop;
     }
 
     private BitmapSource? LoadSheet(int sheetIndex)
