@@ -14,6 +14,7 @@ public sealed class ViewerResources
     private IReadOnlyDictionary<int, string>? _table;
     private PolLanguageFilter? _wordFilter;
     private ProfilePictureCatalog.Catalog? _catalog;
+    private int _catalogGeneration;
     private bool _tableTried, _wordFilterTried;
 
     public ViewerResources(ISettingsService settings, Func<PolRegion, string?>? folder = null,
@@ -62,7 +63,13 @@ public sealed class ViewerResources
     {
         get
         {
-            if (_catalog is null && Folder is { } viewer) _catalog = _pictures(viewer);
+            var generation = ProfilePictureExtras.Generation;
+            if (_catalog is not null && _catalogGeneration != generation) _catalog = null;
+            if (_catalog is null && Folder is { } viewer)
+            {
+                _catalog = _pictures(viewer);
+                _catalogGeneration = generation;
+            }
             return _catalog;
         }
     }

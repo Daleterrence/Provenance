@@ -202,7 +202,7 @@ public partial class App : Application
         var mainWindow = new MainWindow();
         timer.Lap("window built");
         var windows = new WindowManager(settings, WpfDialogs.Default);
-        var mainVm = _main = new MainViewModel(WpfDialogs.Default, windows, credentials, settings, new FeedService(settings), pol, new AvatarService(settings));
+        var mainVm = _main = new MainViewModel(WpfDialogs.Default, windows, credentials, settings, new FeedService(settings), pol, new AvatarService(settings, needExtras: Provenance.Common.PolFormat.ProfilePictureExtras.Need));
         timer.Lap("view model built");
         // Windows logging off cancels a login, and WPF would close the window ignoring its Cancel, so it closes normally first
         SessionEnding += (_, e) =>

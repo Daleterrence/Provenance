@@ -9,9 +9,14 @@ using Serilog;
 
 namespace Provenance.Wpf.Services;
 
-public sealed class AvatarService(ISettingsService settings)
+public sealed class AvatarService(ISettingsService settings, Func<string, ProfilePictureCatalog.Catalog?>? catalog = null,
+                                  string? extrasDir = null, Action<string>? needExtras = null)
 {
+    private readonly string _extras = extrasDir ?? ProfilePictureExtras.Folder;
     private string? _viewerDir;
+    private ProfilePictureCatalog.Catalog? _offered;
+    private int _offeredGeneration = -1;
+    private bool _askedForExtras;
     private readonly object _lock = new();
     private readonly Dictionary<int, ImageSource?> _cache = new();
     private readonly Dictionary<int, BitmapSource?> _sheets = new();
@@ -37,7 +42,33 @@ public sealed class AvatarService(ISettingsService settings)
 
     public ImageSource? NoProfilePicture => Load(0);
 
-    public ImageSource? ProfilePicture(int picId) => (picId > 0 ? Load(picId) : null) ?? NoProfilePicture;
+    public ImageSource? ProfilePicture(int picId) => (picId > 0 && Offered(picId) ? Load(picId) : null) ?? NoProfilePicture;
+
+    // with no catalogue to go by, every picture is drawn as it always was
+    private bool Offered(int picId)
+    {
+        if (ViewerDir is not { } dir) return true;
+        if (!_askedForExtras)
+        {
+            _askedForExtras = true;
+            needExtras?.Invoke(dir);
+        }
+        var generation = ProfilePictureExtras.Generation;
+        bool stale;
+        lock (_lock) stale = _offeredGeneration != generation;
+        if (stale)
+        {
+            var loaded = (catalog ?? (d => ProfilePictureCatalog.Load(d, _extras)))(dir);
+            lock (_lock)
+            {
+                _offered = loaded;
+                _offeredGeneration = generation;
+                foreach (var gone in _cache.Where(kv => kv.Value is null).Select(kv => kv.Key).ToList()) _cache.Remove(gone);
+                foreach (var gone in _sheets.Where(kv => kv.Value is null).Select(kv => kv.Key).ToList()) _sheets.Remove(gone);
+            }
+        }
+        lock (_lock) return _offered is not { } offered || offered.Offers(picId);
+    }
 
     public void Prewarm(IEnumerable<int> picIds)
     {
@@ -86,7 +117,7 @@ public sealed class AvatarService(ISettingsService settings)
         BitmapSource? img = null;
         try
         {
-            if (ProfilePictureSheets.SheetPath(dir, sheetIndex) is { } sheetPath) img = DecodeSheet(sheetPath);
+            if (ProfilePictureSheets.SheetPath(dir, _extras, sheetIndex) is { } sheetPath) img = DecodeSheet(sheetPath);
         }
         catch { }
         lock (_lock)

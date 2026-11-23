@@ -43,6 +43,9 @@ public static class ProfilePictureSheets
         return File.Exists(path) ? path : null;
     }
 
+    public static string? SheetPath(string viewerDir, string? extrasDir, int sheet) =>
+        SheetPath(viewerDir, sheet) ?? (extrasDir is null ? null : SheetPath(extrasDir, sheet));
+
     public static (int X, int Y, int Width, int Height) Cell(int picId)
     {
         int c = picId % PerSheet;
