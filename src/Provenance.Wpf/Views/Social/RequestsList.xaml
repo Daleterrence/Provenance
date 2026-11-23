@@ -52,6 +52,8 @@
                     <Setter TargetName="Ignore" Property="Visibility" Value="Visible" />
                 </DataTrigger>
                 <DataTrigger Binding="{Binding Section}" Value="{x:Static vm:FriendSection.GroupInvitations}">
+                    <Setter TargetName="Accept" Property="IsEnabled" Value="{Binding DataContext.CanEditGroups, RelativeSource={RelativeSource AncestorType=local:RequestsList}}" />
+                    <Setter TargetName="Decline" Property="IsEnabled" Value="{Binding DataContext.CanEditGroups, RelativeSource={RelativeSource AncestorType=local:RequestsList}}" />
                     <Setter TargetName="Accept" Property="Visibility" Value="Visible" />
                     <Setter TargetName="Accept" Property="Content" Value="ACCEPT" />
                     <Setter TargetName="Accept" Property="ToolTip" Value="Accept group invitation" />

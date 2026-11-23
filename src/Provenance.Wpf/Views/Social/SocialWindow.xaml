@@ -19,7 +19,8 @@
         <controls:TitleBar x:Name="Bar" ShowMaximise="True">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button x:Name="AddFriendButton" Height="28" Margin="0,0,8,0" Padding="6,0,10,0" Style="{StaticResource PolButton}" shell:WindowChrome.IsHitTestVisibleInChrome="True"
-                        IsEnabled="{Binding CanEdit}" Click="OnAddFriend" AutomationProperties.Name="Search PlayOnline and send a friend request">
+                        IsEnabled="{Binding CanEdit}" Click="OnAddFriend" AutomationProperties.Name="Search PlayOnline and send a friend request"
+                        ToolTip="{Binding FriendListTip}" ToolTipService.ShowOnDisabled="True">
                     <StackPanel Orientation="Horizontal">
                         <controls:SvgIcon Glyph="search" />
                         <TextBlock Text="ADD A FRIEND" Margin="6,0,0,0" FontSize="12" VerticalAlignment="Center" />
@@ -66,7 +67,9 @@
                                         </StackPanel>
                                         <Button Grid.Column="1" Style="{StaticResource PolButton}" FontSize="11" Height="26"
                                                 Padding="8,0" Content="STOP IGNORING" Click="OnUnignore"
-                                                IsEnabled="{Binding DataContext.CanEdit, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                                IsEnabled="{Binding DataContext.CanEdit, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                ToolTip="{Binding DataContext.FriendListTip, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                ToolTipService.ShowOnDisabled="True" />
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
@@ -90,7 +93,7 @@
                             </Grid>
                             <StackPanel Orientation="Horizontal" Margin="0,1,0,0">
                                 <ComboBox AutomationProperties.Name="Status" Style="{StaticResource StatusPicker}" VerticalAlignment="Center"
-                                          IsEnabled="{Binding StatusEditable}"
+                                          IsEnabled="{Binding StatusEditable}" ToolTip="{Binding StatusTip}" ToolTipService.ShowOnDisabled="True"
                                           ItemsSource="{Binding StatusItems}" SelectedIndex="{Binding MyStatusIndex}" />
                                 <ProgressBar Width="12" Height="12" Margin="6,0,0,0"
                                              Style="{StaticResource Spinner}"
@@ -99,7 +102,8 @@
                                 <TextBlock Text="{Binding Summary}" Margin="10,0,0,0" FontSize="12" VerticalAlignment="Center"
                                            Foreground="{DynamicResource Text.3}" />
                             </StackPanel>
-                            <Border Margin="0,1,0,0" BorderThickness="0,0,0,1" IsEnabled="{Binding CanEdit}">
+                            <Border Margin="0,1,0,0" BorderThickness="0,0,0,1" IsEnabled="{Binding CanEdit}"
+                                    ToolTip="{Binding FriendListTip}" ToolTipService.ShowOnDisabled="True">
                                 <Border.Style>
                                     <Style TargetType="Border">
                                         <Setter Property="BorderBrush" Value="Transparent" />

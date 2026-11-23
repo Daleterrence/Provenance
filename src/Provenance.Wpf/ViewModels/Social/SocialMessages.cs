@@ -39,7 +39,7 @@ public sealed partial class SocialMessages : ObservableObject
     public bool ComposeCountShown => ComposeBytes >= PolMessage.MaxTextBytes * 9 / 10;
     private bool ComposeHasWide => ComposeBytes > Compose.Trim().Replace("\r", "").Length;
 
-    public bool CanCompose => Friend is { CanMessage: true } f && _social.Friends.Any(i => i.Is(f)) && !_social.GameRunning && !_social.HandleSwitching;
+    public bool CanCompose => Friend is { CanMessage: true } f && _social.Friends.Any(i => i.Is(f)) && _social.SendBlockedNote is null;
 
     private Dictionary<string, string> Drafts => _social.Login.Drafts;
     private static string DraftKey(FriendItem f) =>
@@ -48,8 +48,7 @@ public sealed partial class SocialMessages : ObservableObject
     public string ComposeNote => Friend switch
     {
         null => "",
-        _ when _social.GameRunning => "Sending messages isn't available while you're in the game.",
-        _ when _social.HandleSwitching => SocialViewModel.SwitchingNote,
+        _ when _social.SendBlockedNote is { } blocked => blocked,
         { CanMessage: true } when ComposeCountShown && ComposeHasWide =>
             ShiftJis.HasDoubleByte(Compose) ? "Japanese characters count as two." : "Some characters count as two.",
         { CanMessage: true, Online: true } => "This sends a PlayOnline message.",
@@ -232,13 +231,14 @@ public sealed partial class SocialMessages : ObservableObject
 
     private void Queue(FriendItem f, string text)
     {
-        if (Sends.Add(_social.Chat!, f.Row, f.Name, f.Key, text, _social.Session.Pid, _social.GameRunning || _social.HandleSwitching))
+        if (Sends.Add(_social.Chat!, f.Row, f.Name, f.Key, text, _social.Session.Pid, _social.SendBlockedNote is not null))
             Refresh();
     }
 
     public void SettleSends(SessionEnd end)
     {
         Sends.Settle(_social.Chat, end != SessionEnd.Dropped, end == SessionEnd.Play ? "failed:game" : "failed:session");
+        if (end == SessionEnd.Play) Sends.Reopen();
         _social.SaveChat();
         _social.RefreshConversations();
     }

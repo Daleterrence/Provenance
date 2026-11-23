@@ -49,7 +49,7 @@ public partial class GroupsWindow : AppWindow
 
     private void OnCreateGroup(object sender, RoutedEventArgs e)
     {
-        if (Vm is not { } vm || !vm.CanEdit) return;
+        if (Vm is not { } vm || !vm.CanEditGroups) return;
         if (!vm.Groups.CanCreate)
         {
             vm.Groups.ShowLimit();

@@ -67,14 +67,7 @@ public sealed class ChatSync(MailSendQueue sends)
                     changed |= chat.Adopt(f.Name, f.Key);
         bool takeStore = snap.Stored != null && !_storeTaken;
         if (takeStore) changed |= MergeStored(chat, snap, noticeText, _toRead, _mids);
-        foreach (var (token, state, time, seq, _, _) in snap.AllSends)
-            if (token.Length > 0 && (state == "sent" || state.StartsWith("failed", StringComparison.Ordinal)))
-            {
-                changed |= chat.SetSendState(token, state, time, seq);
-                sends.Finished(token);
-            }
-        foreach (var (token, _, _, _, fromSlot, toOther) in snap.SendResults.Where(x => x.FromSlot >= 0))
-            changed |= chat.SetSentFrom(token, fromSlot, toOther);
+        changed |= TakeSendResults(chat, snap);
         foreach (var m in snap.Messages)
         {
             if (m.IsChat && m.HasBody && m.Mid > 0) _mids[m.Key] = m.Mid;
@@ -120,10 +113,8 @@ public sealed class ChatSync(MailSendQueue sends)
             }
             if (m.HasBody && m.IsChat && m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
         }
-        foreach (var (time, seq, fromSlot) in snap.Returned) changed |= chat.MarkReturned(time, seq, fromSlot);
-        foreach (var (token, state) in snap.SendQueue) sends.HookSays(token, state);
-        bool sendsChanged = sends.Pump(chat, pid, blocked);
-        changed |= chat.ExpireSending(ChatStore.SendExpiry(sends.Queued), sends.StillPending());
+        var (pumped, sendsChanged) = PumpSends(chat, snap, pid, blocked);
+        changed |= pumped;
         if (changed)
             foreach (var (name, key) in open)
                 if (chat.UnreadFrom(name, key) > 0) NoteRead(chat.MarkRead(name, key));
@@ -136,6 +127,39 @@ public sealed class ChatSync(MailSendQueue sends)
             _storeDue = (storePid, chat.Version);
         }
         return new(changed, sendsChanged, TakeKept(chat, pid), news);
+    }
+
+    // the sampler's snapshot carries the send results but no messages, so only the sends are taken from it
+    public (bool Changed, bool SendsChanged) MergeSends(ChatStore chat, PolSocialSnapshot snap, int? pid, bool blocked)
+    {
+        bool changed = TakeSendResults(chat, snap);
+        var (pumped, sendsChanged) = PumpSends(chat, snap, pid, blocked);
+        chat.SaveIfDue(DateTime.UtcNow);
+        return (changed | pumped, sendsChanged);
+    }
+
+    private bool TakeSendResults(ChatStore chat, PolSocialSnapshot snap)
+    {
+        bool changed = false;
+        foreach (var (token, state, time, seq, _, _) in snap.AllSends)
+            if (token.Length > 0 && (state == "sent" || state.StartsWith("failed", StringComparison.Ordinal)))
+            {
+                changed |= chat.SetSendState(token, state, time, seq);
+                sends.Finished(token);
+            }
+        foreach (var (token, _, _, _, fromSlot, toOther) in snap.SendResults.Where(x => x.FromSlot >= 0))
+            changed |= chat.SetSentFrom(token, fromSlot, toOther);
+        return changed;
+    }
+
+    private (bool Changed, bool SendsChanged) PumpSends(ChatStore chat, PolSocialSnapshot snap, int? pid, bool blocked)
+    {
+        bool changed = false;
+        foreach (var (time, seq, fromSlot) in snap.Returned) changed |= chat.MarkReturned(time, seq, fromSlot);
+        foreach (var (token, state) in snap.SendQueue) sends.HookSays(token, state);
+        bool sendsChanged = sends.Pump(chat, pid, blocked);
+        changed |= chat.ExpireSending(ChatStore.SendExpiry(sends.Queued), sends.StillPending());
+        return (changed, sendsChanged);
     }
 
     public IReadOnlyList<int> TakeKept(ChatStore chat, int? pid)

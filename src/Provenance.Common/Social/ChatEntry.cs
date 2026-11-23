@@ -47,6 +47,7 @@ public sealed record ChatEntry(string Key, string Peer, bool Outgoing, string Su
         "failed:hourly limit" => HookFailures.Messages.HourlyLimit,
         "failed:session" => HookFailures.Messages.SessionEnded,
         "failed:game" => HookFailures.Messages.GameStarted,
+        "failed:ingame" => HookFailures.Messages.GameOff,
         "failed:handle changing" => HookFailures.Messages.HandleChanging,
         "failed:busy" => HookFailures.Busy,
         "failed:returned" => HookFailures.Messages.Returned,

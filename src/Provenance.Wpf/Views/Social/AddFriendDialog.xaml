@@ -69,7 +69,8 @@
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Style="{StaticResource PolButton}" Content="CLOSE" Click="OnClose" />
                 <Button x:Name="SendButton" Content="SEND FRIEND REQUEST" Click="OnSend" Margin="{StaticResource Footer.Gap}"
-                        Style="{StaticResource PolButton}" />
+                        Style="{StaticResource PolButton}" ToolTipService.ShowOnDisabled="True"
+                        ToolTip="{Binding Social.FriendListTip, RelativeSource={RelativeSource AncestorType=Window}}" />
             </StackPanel>
         </Border>
     </Grid>

@@ -130,7 +130,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     private bool _goingOnline;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(FriendsUnavailable), nameof(NoFriendsInList))] private bool _onlineFailed;
-    public bool PopShown => PopText.Length > 0 && LoggedIn && !GameRunning;
+    public bool PopShown => PopText.Length > 0 && LoggedIn && (!GameRunning || _login.RequestedStatus is not null || PopIsError);
     public bool FriendsUnavailable => OnlineFailed && LoggedIn;
     public bool LoggedIn => _session.LoggedIn;
     public SessionState Session => _session;
@@ -191,7 +191,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private const string StatusWaiting = "Changing your online status...";
     public static string StatusChanging(PolStatus status) => $"Changing your online status to {PolStatusText.Label(status)}...";
     [ObservableProperty, NotifyPropertyChangedFor(nameof(PopShown))] private string _popText = "";
-    [ObservableProperty] private bool _popIsError;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(PopShown))] private bool _popIsError;
     [ObservableProperty] private string _statusPendingText = StatusWaiting;
 
     private void RefreshPop()
@@ -216,7 +216,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         _login.PopErrorUntil = Now + PopErrorTime;
     }
     [ObservableProperty, NotifyPropertyChangedFor(nameof(StatusEditable))] private bool _statusPending;
-    public bool StatusEditable => !StatusPending && WriteBlockedNote is null;
+    public bool StatusEditable => !StatusPending && StatusBlockedNote is null;
     private bool _applyingSnapshot;
 
     private FriendItem? _selectedFriend;
@@ -314,8 +314,10 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     {
         _gameFeedExpected = expected;
         _gameBegan = Now;
+        _gameWrites = GameWrites.None;
         GameFeedLive = false;
         RaiseFriendsLocked();
+        RaiseGameWrites();
     }
 
     private void RaiseFriendsLocked()
@@ -324,18 +326,15 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         OnPropertyChanged(nameof(GameFeedFault));
     }
 
-    internal void GameEnded()
-    {
-        _gameFeedExpected = false;
-        GameFeedLive = false;
-        RaiseFriendsLocked();
-    }
+    internal void GameEnded() => LoseGameFeed();
 
     private void LoseGameFeed()
     {
         _gameFeedExpected = false;
+        _gameWrites = GameWrites.None;
         GameFeedLive = false;
         RaiseFriendsLocked();
+        RaiseGameWrites();
     }
 
     // on the main window's timer: a feed that's gone quiet, or one that never started, is a lost one
@@ -345,8 +344,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         if (GameFeedLive ? Now - _gameFeedAt > GameFeedStale : _gameFeedExpected && Now - _gameBegan > GameFeedGrace) LoseGameFeed();
     }
 
-    // what the sampler sends while the game runs: the friends, who's ignored and my status. Everything else stays as the last
-    // snapshot from the hold had it, as nothing else can change in the game
+    // what the sampler sends whilst the game runs: the friends, who's ignored, my status and comment, and how the writes the
+    // game side took went. Everything else stays as the last snapshot from the hold had it, as nothing else can change in the game
     internal void ApplyGame(PolSocialSnapshot snap)
     {
         if (!GameRunning) return;
@@ -356,17 +355,34 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             return;
         }
         if (snap.Sampler != "live" || !snap.FriendsLoaded) return;
+        var was = (GameFeedLive, _gameWrites);
         _gameFeedAt = Now;
+        _gameWrites = snap.GameWrites ?? GameWrites.None;
         _applyingSnapshot = true;
         try
         {
-            var merged = _login.Last with { Friends = snap.Friends, MyStatus = snap.MyStatus, Blocked = snap.Blocked };
+            // an older hook's sampler has no comment in it
+            var merged = _login.Last with
+            {
+                Friends = snap.Friends, MyStatus = snap.MyStatus, Blocked = snap.Blocked,
+                MyComment = snap.GameWrites is null ? _login.Last.MyComment : snap.MyComment,
+            };
             _login.Last = merged;
+            bool chatChanged = _login.Chat is { } chat && MergeGameSends(chat, snap);
+            ApplyEditState(snap);
+            Search.Apply(snap);
             ZoneSearch?.Tick(merged.Friends);
             Lookups.Seen(merged.Friends);
             RebuildFriends(merged);
             OnlineCount = merged.Friends.Count(f => f.Online && !f.Pending);
-            MyStatusIndex = Array.IndexOf(StatusChoices, merged.MyStatus == PolStatus.Busy ? PolStatus.Online : merged.MyStatus);
+            if (_login.RequestedStatus is not null && !_gameWrites.Status)
+            {
+                _login.RequestedStatus = null;
+                PopStatusError(GameOffText.Status);
+            }
+            SettleStatus(snap);
+            RefreshPop();
+            MyComment = merged.MyComment;
             static string BlockedId(PolBlocked x) => $"{x.Index}/{x.Key}/{x.Name}";
             if (!Blocked.Select(BlockedId).SequenceEqual(merged.Blocked.Select(BlockedId)))
             {
@@ -380,9 +396,18 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             OnPropertyChanged(nameof(NoFriends));
             OnPropertyChanged(nameof(NoFriendsInList));
             OnPropertyChanged(nameof(NoRequests));
+            if (chatChanged) RefreshConversations();
         }
         finally { _applyingSnapshot = false; }
         GameFeedLive = true;
+        if (was != (GameFeedLive, _gameWrites)) RaiseGameWrites();
+    }
+
+    private bool MergeGameSends(ChatStore chat, PolSocialSnapshot snap)
+    {
+        bool changed = !_gameWrites.Send && _login.Sends.FailQueued(chat, "failed:ingame");
+        var (merged, sendsChanged) = _login.Sync.MergeSends(chat, snap, _pol.Pid, SendBlockedNote is not null);
+        return changed | merged | sendsChanged;
     }
 
     private void OnPhaseChanged()
@@ -400,14 +425,12 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         if (!running) GameEnded();
         if (_gameRunningShown.Changed(running))
         {
-            foreach (var c in Conversations.ToList()) c.StateChanged();
             OnPropertyChanged(nameof(GameRunning));
             OnPropertyChanged(nameof(EditProfileTip));
             OnPropertyChanged(nameof(CanOpenEditor));
-            OnPropertyChanged(nameof(StatusEditable));
         }
         OnPropertyChanged(nameof(CanGroupChat));
-        OnPropertyChanged(nameof(CanEdit));
+        RaiseGameWrites();
         RaiseFriendsLocked();
     }
 
@@ -424,7 +447,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanEdit), nameof(StatusEditable))]
+    [NotifyPropertyChangedFor(nameof(CanEdit), nameof(CanEditGroups), nameof(StatusEditable))]
     private bool _handleSwitching;
     public const string SwitchingNote = "Wait for the handle switch to finish.";
 
@@ -432,6 +455,27 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     System.Windows.Input.ICommand ISocialSession.ChangeProfilePictureCommand => ChangeProfilePictureCommand;
 
     public string? WriteBlockedNote => GameRunning ? GameRunningNote : HandleSwitching ? SwitchingNote : null;
+
+    // in the game, messages, status and the friend list go only as far as the game side says it takes them
+    private GameWrites _gameWrites = GameWrites.None;
+    private bool GameTakes(bool area) => !GameRunning || (GameFeedLive && area);
+    private string? OffNote(bool area, string off) => !GameTakes(area) ? off : HandleSwitching ? SwitchingNote : null;
+    internal string? SendBlockedNote => OffNote(_gameWrites.Send, GameOffText.Messages);
+    internal string? StatusBlockedNote => OffNote(_gameWrites.Status, GameOffText.Status);
+    internal string? FriendListBlockedNote => OffNote(_gameWrites.Edits, GameOffText.FriendList);
+    public string StatusTip => GameTakes(_gameWrites.Status) ? "Change your PlayOnline status" : GameOffText.Status;
+    public string? FriendListTip => GameTakes(_gameWrites.Edits) ? null : GameOffText.FriendList;
+
+    private void RaiseGameWrites()
+    {
+        OnPropertyChanged(nameof(CanEdit));
+        OnPropertyChanged(nameof(CanEditGroups));
+        OnPropertyChanged(nameof(StatusEditable));
+        OnPropertyChanged(nameof(StatusTip));
+        OnPropertyChanged(nameof(FriendListTip));
+        OnPropertyChanged(nameof(PopShown));
+        foreach (var c in Conversations.ToList()) c.StateChanged();
+    }
 
     partial void OnHandleSwitchingChanged(bool value)
     {
@@ -668,28 +712,9 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         RefreshPending();
         RefreshUnseen();
 
-        if (_login.RequestedStatus is { } want)
-        {
-            if (!snap.StatusBusy && snap.MyStatus == want)
-            {
-                _login.RequestedStatus = null;
-            }
-            else if (!snap.StatusBusy && Now - _login.RequestedAt > HookLimits.StatusRefused)
-            {
-                _login.RequestedStatus = null;
-                PopStatusError(HookFailures.Friends.StatusRefused(PolStatusText.Label(want)));
-            }
-            else if (Now - _login.RequestedAt > HookLimits.Status)
-            {
-                _login.RequestedStatus = null;
-                PopStatusError(HookFailures.Friends.StatusNoAnswer(PolStatusText.Label(want)));
-            }
-        }
-        StatusPending = _login.RequestedStatus != null || snap.StatusBusy;
+        SettleStatus(snap);
         if (_login.RequestedStatus is null)
         {
-            var status = snap.MyStatus == PolStatus.Busy ? PolStatus.Online : snap.MyStatus;
-            MyStatusIndex = Array.IndexOf(StatusChoices, status);
             _goingOnline = snap.Presence == "starting";
             OnlineFailed = snap.Presence.StartsWith("failed", StringComparison.Ordinal);
         }
@@ -713,6 +738,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         }
         HasBlocked = Blocked.Count > 0;
         OnPropertyChanged(nameof(CanEdit));
+        OnPropertyChanged(nameof(CanEditGroups));
         if (chatChanged) RefreshConversations();
         OnPropertyChanged(nameof(Summary));
         OnPropertyChanged(nameof(NoFriends));
@@ -721,10 +747,34 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         SnapshotApplied?.Invoke(snap);
     }
 
+    private void SettleStatus(PolSocialSnapshot snap)
+    {
+        if (_login.RequestedStatus is { } want)
+        {
+            if (!snap.StatusBusy && snap.MyStatus == want)
+            {
+                _login.RequestedStatus = null;
+            }
+            else if (!snap.StatusBusy && Now - _login.RequestedAt > HookLimits.StatusRefused)
+            {
+                _login.RequestedStatus = null;
+                PopStatusError(HookFailures.Friends.StatusRefused(PolStatusText.Label(want)));
+            }
+            else if (Now - _login.RequestedAt > HookLimits.Status)
+            {
+                _login.RequestedStatus = null;
+                PopStatusError(HookFailures.Friends.StatusNoAnswer(PolStatusText.Label(want)));
+            }
+        }
+        StatusPending = _login.RequestedStatus != null || snap.StatusBusy;
+        if (_login.RequestedStatus is null)
+            MyStatusIndex = Array.IndexOf(StatusChoices, snap.MyStatus == PolStatus.Busy ? PolStatus.Online : snap.MyStatus);
+    }
+
     private bool MergeChat(ChatStore chat, PolSocialSnapshot snap)
     {
         var open = Conversations.Where(c => c.ConversationVisible && c.Friend != null).Select(c => (c.Friend!.Name, c.Friend.Key)).ToList();
-        var r = _login.Sync.Merge(chat, snap, _pol.Pid, WriteBlockedNote is not null, open, NoticeText, _viewer.Filtered);
+        var r = _login.Sync.Merge(chat, snap, _pol.Pid, SendBlockedNote is not null, open, NoticeText, _viewer.Filtered);
         if (r.SendsChanged) RefreshConversations();
         foreach (var n in r.News)
             switch (n.Kind)
@@ -965,7 +1015,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     internal void RebuildFriends() => RebuildFriends(_login.Last);
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanEdit), nameof(EditNoteShown), nameof(Saving))]
+    [NotifyPropertyChangedFor(nameof(CanEdit), nameof(CanEditGroups), nameof(EditNoteShown), nameof(Saving))]
     [NotifyPropertyChangedFor(nameof(EditStatus), nameof(EditStatusShown))]
     private bool _editBusy;
     public StatusLine EditNote { get; } = new();
@@ -974,7 +1024,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public string EditStatus => EditBusy ? "Saving the change to PlayOnline..."
                               : ProfilePictureSaving ? "Saving your profile picture to PlayOnline..." : EditNote.Text;
     public bool EditStatusShown => Saving || !string.IsNullOrWhiteSpace(EditNote.Text);
-    public bool CanEdit => LoggedIn && !EditBusy && _pol.Pid != null && WriteBlockedNote is null;
+    public bool CanEdit => LoggedIn && !EditBusy && _pol.Pid != null && FriendListBlockedNote is null;
+    public bool CanEditGroups => LoggedIn && !EditBusy && _pol.Pid != null && WriteBlockedNote is null;
 
     [RelayCommand]
     private void DismissEditNote() => EditNote.Clear();
@@ -987,11 +1038,11 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         EditNote.Fail(HookFailures.RequestWriteFailed);
     }
 
-    internal bool BeginEdit(out int pid, out string token, bool followSend = false)
+    internal bool BeginEdit(out int pid, out string token, bool followSend = false, bool group = false)
     {
         token = HookFiles.NewToken();
         pid = _pol.Pid ?? 0;
-        if (!CanEdit || pid == 0) return false;
+        if (!(group ? CanEditGroups : CanEdit) || pid == 0) return false;
         if (!followSend) _login.Edit.Begin(token, HookLimits.FriendEdit, Now);
         EditBusy = true;
         EditNote.Clear();
@@ -1039,6 +1090,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     {
         "timeout" => HookFailures.Friends.EditNoAnswer,
         "failed:busy" => HookFailures.Busy,
+        "failed:ingame" => GameOffText.FriendList,
         "failed:pending" => HookFailures.Friends.DeleteOnly,
         "failed:self" => HookFailures.Friends.IgnoreSelf,
         "failed:friend list changed" or "failed:no such friend" => HookFailures.FriendListChanged,
@@ -1093,7 +1145,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     partial void OnMyStatusIndexChanged(int value)
     {
-        if (_applyingSnapshot || WriteBlockedNote is not null || value < 0 || value >= StatusChoices.Length) return;
+        if (_applyingSnapshot || StatusBlockedNote is not null || value < 0 || value >= StatusChoices.Length) return;
         if (StatusPending) return;
         var want = StatusChoices[value];
         _login.RequestedStatus = want;
@@ -1255,9 +1307,9 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
 
     public void AnswerWith(FriendItem f, RequestChoice choice)
     {
-        if (!CanEdit)
+        if (!(f.IsGroupInvite ? CanEditGroups : CanEdit))
         {
-            if (WriteBlockedNote is { } blocked) EditNote.Fail(blocked);
+            if ((f.IsGroupInvite ? WriteBlockedNote : FriendListBlockedNote) is { } blocked) EditNote.Fail(blocked);
             return;
         }
         switch (choice)
@@ -1280,16 +1332,17 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     public IReadOnlyList<MenuAction> FriendMenu(FriendItem f, Action<FriendItem>? openConversation = null)
     {
         bool edit = CanEdit && f.IsFriend && f.Key.Length > 0;
+        var tip = FriendListTip;
         if (f.IsGroupInvite)
-            return [new(AcceptInviteText, CanEdit, () => Groups.AnswerInvite(f, true)),
-                    new(DeclineInviteText, CanEdit, () => Groups.AnswerInvite(f, false))];
+            return [new(AcceptInviteText, CanEditGroups, () => Groups.AnswerInvite(f, true)),
+                    new(DeclineInviteText, CanEditGroups, () => Groups.AnswerInvite(f, false))];
         if (f.IsRequest)
-            return [new(AcceptRequestText, CanEdit && !f.IsMe, () => Search.AnswerRequest(f, RequestAnswer.Accept)),
-                    new(DeclineRequestText, CanEdit, () => DeclineRequest(f)),
+            return [new(AcceptRequestText, CanEdit && !f.IsMe, () => Search.AnswerRequest(f, RequestAnswer.Accept)) { Tip = tip },
+                    new(DeclineRequestText, CanEdit, () => DeclineRequest(f)) { Tip = tip },
                     MenuAction.Separator,
-                    new(IgnoreRequestText, CanEdit && !f.IsMe, () => IgnoreRequest(f))];
+                    new(IgnoreRequestText, CanEdit && !f.IsMe, () => IgnoreRequest(f)) { Tip = tip }];
         if (!f.IsFriend && !f.Pending)
-            return [new($"Add {f.Name} as a friend...", CanEdit, () => _windows.AddFriend(this, f.Name, f.Key))];
+            return [new($"Add {f.Name} as a friend...", CanEdit, () => _windows.AddFriend(this, f.Name, f.Key)) { Tip = tip }];
         var menu = new List<MenuAction>
         {
             new("Send message", f.CanMessage, () =>
@@ -1304,9 +1357,9 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         };
         var inviteTo = Groups.Items.Where(g => g.CanInvite && !g.Members.Any(m => m.Key.Length > 0 && m.Key == f.Key)).ToList();
         if (inviteTo.Count > 0 && f.IsFriend && !f.Pending && !f.IsMe)
-            menu.Add(new("Invite into group", CanEdit)
+            menu.Add(new("Invite into group", CanEditGroups)
             {
-                Items = inviteTo.Select(g => new MenuAction(g.Name, CanEdit, () => Groups.Invite(g, f))).ToList(),
+                Items = inviteTo.Select(g => new MenuAction(g.Name, CanEditGroups, () => Groups.Invite(g, f))).ToList(),
             });
         menu.Add(MenuAction.Separator);
         menu.Add(new("Rename...", edit && !f.Pending, () =>
@@ -1315,19 +1368,19 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
                 $"Choose a new name for {f.Name} on your friend list (up to 15 English letters, numbers or symbols). " +
                 "PlayOnline saves it with your friend list.", f.Name, maxLength: PolLimits.HandleName);
             if (name is not null && name.Trim() != f.Name) RenameFriend(f, name);
-        }));
+        }) { Tip = tip });
         var removeBody = $"Remove {f.Name} from your PlayOnline friend list? Your saved messages with {f.Name} stay in Provenance.";
         menu.Add(new(f.Pending ? DeleteRequestText : "Remove from friends...", edit, () =>
         {
             if (f.Pending) DeleteRequest(f);
             else if (ConfirmDestructive("Remove friend", removeBody, "REMOVE")) RemoveFriend(f);
-        }));
+        }) { Tip = tip });
         menu.Add(new("Ignore...", edit && !f.Pending && !f.IsMe, () =>
         {
             var pick = _dialogs.Choose("Ignore " + f.Name, IgnoreQuestion(f.Name), "IGNORE",
                 "Ignore this handle only", "Ignore every handle of this PlayOnline ID", ConfirmStyle.Destructive);
             if (pick is { } which) IgnoreFriend(f, which == 1);
-        }));
+        }) { Tip = tip });
         return menu;
     }
 }

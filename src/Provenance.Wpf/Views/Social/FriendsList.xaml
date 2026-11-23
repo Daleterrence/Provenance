@@ -106,6 +106,7 @@
                        Text="You don't have any friends on this PlayOnline account yet." />
             <Button Margin="0,8,0,0" Padding="6,0,10,0" Height="28" HorizontalAlignment="Left" Style="{StaticResource PolButton}"
                     FontSize="12" IsEnabled="{Binding CanEdit}" Click="OnAddFriend"
+                    ToolTip="{Binding FriendListTip}" ToolTipService.ShowOnDisabled="True"
                     AutomationProperties.Name="Search PlayOnline and send a friend request">
                 <StackPanel Orientation="Horizontal">
                     <controls:SvgIcon Glyph="search" />

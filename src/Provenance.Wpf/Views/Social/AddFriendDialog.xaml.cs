@@ -55,6 +55,8 @@ public partial class AddFriendDialog : AppWindow
         UpdateSend();
     }
 
+    public SocialViewModel Social => _social;
+
     private void UpdateSend() => SendButton.IsEnabled = _social.CanEdit && Search.CanRequest(Hits.SelectedItem as SocialSearch.SearchHitItem);
 
     private void OnSearch(object sender, RoutedEventArgs e) => Search.Run(NameBox.Text);

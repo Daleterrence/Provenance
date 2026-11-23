@@ -89,4 +89,15 @@ public sealed class MailSendQueue
         _queue.Clear();
         _closed = true;
     }
+
+    public void Reopen() => _closed = false;
+
+    // lines still waiting here never reached the hook, so they can't go once sending's off
+    public bool FailQueued(ChatStore? chat, string state)
+    {
+        if (_queue.Count == 0) return false;
+        var states = _queue.Select(q => (q.Token, state)).ToList();
+        _queue.Clear();
+        return chat?.SetSendStates(states) == true;
+    }
 }

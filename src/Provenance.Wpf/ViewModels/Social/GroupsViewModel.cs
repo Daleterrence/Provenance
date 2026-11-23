@@ -136,7 +136,7 @@ public sealed partial class GroupsViewModel : ObservableObject
     private void BeginGroup(Func<int, string, bool> write, string doneText, bool bySend = false, string? leaving = null,
                             FriendItem? invite = null)
     {
-        if (!_social.BeginEdit(out var pid, out var token, followSend: true)) return;
+        if (!_social.BeginEdit(out var pid, out var token, followSend: true, group: true)) return;
         _login.Group.Begin(token, HookLimits.Group, _social.Now);
         _login.Done = doneText;
         _login.BySend = bySend;
@@ -219,7 +219,7 @@ public sealed partial class GroupsViewModel : ObservableObject
 
     public void AnswerInvite(FriendItem invite, bool accept)
     {
-        if (!invite.IsGroupInvite || !_social.CanEdit) return;
+        if (!invite.IsGroupInvite || !_social.CanEditGroups) return;
         var subject = accept ? _social.Viewer.Text(0x46d6, "Group registration accepted")
                              : _social.Viewer.Text(0x46d8, "Group registration declined");
         _login.InviteAccepted = accept;
@@ -312,7 +312,7 @@ public sealed partial class GroupsViewModel : ObservableObject
     {
         if (g.IsInvited)
             return [new("Accept or decline it under Group invitations", false)];
-        bool can = _social.CanEdit;
+        bool can = _social.CanEditGroups;
         var menu = new List<MenuAction>();
         if (g.CanChat)
         {
@@ -350,7 +350,7 @@ public sealed partial class GroupsViewModel : ObservableObject
 
     public IReadOnlyList<MenuAction> MemberMenu(GroupItem g, GroupMemberItem m)
     {
-        bool Can(GroupRole role) => _social.CanEdit && !g.IsInvited && CanSetRole(g, m, role);
+        bool Can(GroupRole role) => _social.CanEditGroups && !g.IsInvited && CanSetRole(g, m, role);
         var friend = m.Key.Length > 0 ? _social.Friends.FirstOrDefault(f => f.IsFriend && f.Key == m.Key) : null;
         return
         [

@@ -37,6 +37,7 @@ public static class HookFailures
         public const string HourlyLimit = "Not sent: you've sent 600 messages in the last hour. Try again later.";
         public const string SessionEnded = "Not sent: the PlayOnline session ended before it went.";
         public const string GameStarted = "Not sent: FINAL FANTASY XI started before it went.";
+        public const string GameOff = "You cannot send messages from Provenance whilst FINAL FANTASY XI is running.";
         public const string Returned = "Not delivered: PlayOnline sent it back.";
         public const string Rejected = "Not sent: PlayOnline didn't accept it.";
     }

@@ -84,9 +84,9 @@ public sealed partial class SocialSearch : ObservableObject
         var value = text.Trim();
         var kind = Kind;
         if (Busy || !_social.LoggedIn || _social.Session.Pid is not { } pid) return;
-        if (_social.GameRunning)
+        if (_social.FriendListTip is { } off)
         {
-            Note.Fail(SocialViewModel.GameRunningNote);
+            Note.Fail(off);
             return;
         }
         if (!FriendSearch.Ok(kind, value))
@@ -148,7 +148,7 @@ public sealed partial class SocialSearch : ObservableObject
 
     internal string? RequestBlocked =>
         _social.CanEdit ? null
-        : _social.GameRunning ? SocialViewModel.GameRunningNote
+        : _social.FriendListTip is { } off ? off
         : _social.EditBusy ? "Wait for your last change to finish first."
         : "Log in to send friend requests.";
 
@@ -254,6 +254,7 @@ public sealed partial class SocialSearch : ObservableObject
             "timeout" => HookFailures.Friends.AnswerNoReply,
             "failed:handle changing" => HookFailures.Friends.AnswerHandleChanging,
             "failed:busy" => HookFailures.Busy,
+            "failed:ingame" => GameOffText.FriendList,
             "failed:no handle" => HookFailures.Friends.AnswerHandleGone,
             "failed:no such request" => HookFailures.Friends.NoSuchRequest,
             "failed:self" => HookFailures.Friends.OwnRequest,
@@ -302,6 +303,7 @@ public sealed partial class SocialSearch : ObservableObject
             {
                 "timeout" => HookFailures.Friends.SearchNoAnswer,
                 "failed:busy" => HookFailures.Busy,
+                "failed:ingame" => GameOffText.FriendList,
                 "failed:bad name" => HookFailures.Friends.BadHandleName,
                 "failed:quote" => HookFailures.Friends.QuoteInName,
                 "failed:bad hid" => HookFailures.Friends.BadHid,
@@ -321,6 +323,7 @@ public sealed partial class SocialSearch : ObservableObject
             {
                 "timeout" => HookFailures.Friends.RequestNoAnswer,
                 "failed:busy" => HookFailures.Busy,
+                "failed:ingame" => GameOffText.FriendList,
                 "failed:already a friend" => HookFailures.Friends.AlreadyFriend(_login.RequestName),
                 "failed:self" => HookFailures.Friends.RequestSelf,
                 "failed:-7181" => HookFailures.Friends.IgnoredFirst(_login.RequestName),
