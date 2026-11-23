@@ -9,6 +9,11 @@ public sealed record PolQueuedSend(string Token, string State);
 
 public sealed record PolReturnedSend(long Time, long Seq, int FromSlot);
 
+public sealed record GameWrites(bool Send, bool Status, bool Edits)
+{
+    public static readonly GameWrites None = new(false, false, false);
+}
+
 // FfxiService is the Content ID check ("active" or "none"), Notice the account notice status (221..252 = LM-01..LM-32)
 public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int MyProfilePictureId,
                                        IReadOnlyList<PolFriend> Friends, IReadOnlyList<PolMessage> Messages,
@@ -18,6 +23,8 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int 
     public bool FriendsLoaded { get; init; } = true;
     // "live" while the game runs, "off" once the sampler's stopped for good, "" from the hold
     public string Sampler { get; init; } = "";
+    // which writes the game side takes, null from the hold or a hook that predates them
+    public GameWrites? GameWrites { get; init; }
     public int Beat { get; init; }
     public bool GameFriends { get; init; }
     public bool Lean { get; init; }

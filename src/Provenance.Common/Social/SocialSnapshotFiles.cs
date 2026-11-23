@@ -34,6 +34,8 @@ public static class SocialSnapshotFiles
                 SendJob = Job(root, "send"),
                 FriendsLoaded = Bool(root, "friendsLoaded"),
                 Sampler = Str(root, "sampler"),
+                GameWrites = Obj(root, "gameWrites") is { ValueKind: JsonValueKind.Object } gw
+                    ? new GameWrites(Bool(gw, "send"), Bool(gw, "status"), Bool(gw, "edits")) : null,
                 GameFriends = Bool(root, "gameFriends"),
                 Beat = Int(root, "beat", 0),
                 Lean = Bool(root, "lean"),
