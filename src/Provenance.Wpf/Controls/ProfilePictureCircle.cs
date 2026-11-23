@@ -53,15 +53,16 @@ public sealed class ProfilePictureCircle : ContentControl
         var clip = new EllipseGeometry(new Point(d / 2, d / 2), d / 2, d / 2);
         var grid = new Grid { Width = d, Height = d, Clip = clip };
         grid.SetResourceReference(Panel.BackgroundProperty, "Surface.2");
+        var crop = ProfilePictureCrops.Of(Source);
         var img = new Image
         {
             Source = Source,
-            Width = d,
-            Height = d * 1.5,
+            Width = d * crop.Zoom,
+            Height = d * crop.Zoom * 1.5,
             Stretch = Stretch.Fill,
-            HorizontalAlignment = HorizontalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, -d * 0.2, 0, 0),
+            Margin = new Thickness((d - d * crop.Zoom) / 2 + d * crop.Left, d * crop.Top, 0, 0),
         };
         RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
         grid.Children.Add(img);

@@ -10,7 +10,8 @@ using Serilog;
 namespace Provenance.Wpf.Services;
 
 public sealed class AvatarService(ISettingsService settings, Func<string, ProfilePictureCatalog.Catalog?>? catalog = null,
-                                  string? extrasDir = null, Action<string>? needExtras = null)
+                                  string? extrasDir = null, Action<string>? needExtras = null,
+                                  Func<string, ProfilePictureCrop>? cropOf = null)
 {
     private readonly string _extras = extrasDir ?? ProfilePictureExtras.Folder;
     private string? _viewerDir;
@@ -42,12 +43,13 @@ public sealed class AvatarService(ISettingsService settings, Func<string, Profil
 
     public ImageSource? NoProfilePicture => Load(0);
 
-    public ImageSource? ProfilePicture(int picId) => (picId > 0 && Offered(picId) ? Load(picId) : null) ?? NoProfilePicture;
+    public ImageSource? ProfilePicture(int picId) =>
+        (picId > 0 && Offered(picId) is { } offer ? Load(picId, offer.SetKey) : null) ?? NoProfilePicture;
 
     // with no catalogue to go by, every picture is drawn as it always was
-    private bool Offered(int picId)
+    private (bool Yes, string? SetKey)? Offered(int picId)
     {
-        if (ViewerDir is not { } dir) return true;
+        if (ViewerDir is not { } dir) return (true, null);
         if (!_askedForExtras)
         {
             _askedForExtras = true;
@@ -67,7 +69,11 @@ public sealed class AvatarService(ISettingsService settings, Func<string, Profil
                 foreach (var gone in _sheets.Where(kv => kv.Value is null).Select(kv => kv.Key).ToList()) _sheets.Remove(gone);
             }
         }
-        lock (_lock) return _offered is not { } offered || offered.Offers(picId);
+        lock (_lock)
+        {
+            if (_offered is not { } offered) return (true, null);
+            return offered.Find(picId) is { } pic ? (true, pic.CategoryKey) : null;
+        }
     }
 
     public void Prewarm(IEnumerable<int> picIds)
@@ -89,7 +95,7 @@ public sealed class AvatarService(ISettingsService settings, Func<string, Profil
         catch { }
     }
 
-    private ImageSource? Load(int picId)
+    private ImageSource? Load(int picId, string? setKey = null)
     {
         if (picId < 0 || ViewerDir is null) return null;
         lock (_lock) if (_cache.TryGetValue(picId, out var cached)) return cached;
@@ -102,6 +108,7 @@ public sealed class AvatarService(ISettingsService settings, Func<string, Profil
             {
                 var crop = new CroppedBitmap(sheet, new Int32Rect(x, y, w, h));
                 crop.Freeze();
+                ProfilePictureCrops.Attach(crop, setKey is null ? ProfilePictureCrop.Default : (cropOf ?? (k => ProfilePictureCrop.For(k)))(setKey));
                 img = crop;
             }
         }
