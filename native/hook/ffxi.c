@@ -46,6 +46,7 @@ static int iw_send_held(void);
 static int iw_answer_held(void);
 static void iw_answer_result(const char *token, const char *state);
 static void iw_send_result(const char *token, const char *state, const BYTE *msg);
+static void iw_arrived(const BYTE *hdr, const char *name, const char *body, int got);
 
 static const int g_fx_core[] = { AT_FX_COUNT_CALL, AT_FX_MARK_CALL, AT_FX_ADD_LINE, AT_FX_CHAT_LOG };
 
@@ -771,13 +772,14 @@ static BYTE *fx_build(BYTE *b, const fx_send *s)
     char me_name[16];
     unsigned __int64 me = pc_my_id(b);
     int my_slot = peers_my_handle(b, me_name), n;
-    BYTE *msg = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, MAIL_BUILT_SIZE + lstrlenA(s->subj) + lstrlenA(s->text) + 16);
+    BYTE *msg = mail_send_alloc(lstrlenA(s->subj) + lstrlenA(s->text) + 2);
     if (!msg || ((ULONG_PTR)msg & 7)) {
         if (msg) HeapFree(GetProcessHeap(), 0, msg);
         return NULL;
     }
     n = pc_mail_body(b, s->subj, s->text, 0, NULL, (char *)msg + MAIL_BUILT_SIZE);
     pc_mail_header(b, msg, s->kind, (unsigned)me, (unsigned)(me >> 32), s->lo, s->hi, me_name, s->subj, my_slot, s->slot, 1000, 0, n);
+    mail_send_keep_plain(msg);
     return msg;
 }
 
@@ -793,6 +795,7 @@ static void fx_send_done(int ok, const char *why)
         InterlockedIncrement(&g_fx.nsent_ids);
     }
     if (g_fx.cur_token[0]) iw_send_result(g_fx.cur_token, ok ? "sent" : why, ok ? g_fx.msg : NULL);
+    if (ok && g_fx.msg) mail_send_plain_back(g_fx.msg);
     for (i = 0; ok && g_fx.msg && !g_fx.cur_kind && i < FX_COPIES; i++)
         if (!InterlockedCompareExchangePointer(&g_fx.copies[i], g_fx.msg, NULL)) {
             g_fx.msg = NULL;
@@ -1409,6 +1412,7 @@ static int fx_take(const char *name, const BYTE *hdr)
     /* a bounce can be addressed to the friend it was for, so this goes before the owned check */
     if (kind == 0 && !pc_mail_receipt(hdr) && fx_bounced(hdr)) return fx_queue(FX_BOUNCE, "", "", NULL, NULL, 0) ? 1 : 2;
     if (!message_store_owned(hdr, 1, g_ig.written.me) || pc_mail_receipt(hdr) || fx_ignored(hdr)) return 1;
+    if (kind != 0) iw_arrived(hdr, name, NULL, 0);
     /* a friend request, or the news that one was accepted, stays in r\b and just gets a line. Anything about groups gets none */
     if (kind == 1 || kind == 9) {
         fx_sender(hdr, who);
@@ -1438,6 +1442,7 @@ static int fx_take(const char *name, const BYTE *hdr)
     f.alt_home = -1;
     got = message_store_body(&f, body, sizeof body);
     if (got < (int)MAIL(hdr)->len) return 0;
+    iw_arrived(hdr, name, body, got);
     for (start = 0; start < got && body[start] != 0x07; start++) {}
     start = start < got ? start + 1 : 0;
     for (end = start; end < got && body[end]; end++) {}
@@ -1481,6 +1486,7 @@ static void fx_scan(BYTE *b, int seeding)
             /* already there before the player first got in the world, or it came at the character select: it stays unread */
             } else if (seeding || g_fx.at_select) {
                 if (fx_seen_add(fd.cFileName, hdr, 1) >= 0) n++;
+                iw_arrived(hdr, fd.cFileName, NULL, 0);
                 continue;
             } else if ((k = fx_seen_add(fd.cFileName, hdr, 0)) < 0) {
                 continue;

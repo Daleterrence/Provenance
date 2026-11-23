@@ -17,7 +17,7 @@ static struct {
     ULONGLONG wait_at[IW_BOXES];
     iw_job send, edit;
     send_hist hist[SEND_HIST];
-    int hist_next, status_want, comment_job, up, then, dead;
+    int hist_next, status_want, comment_job, up, then, dead, mid_from;
     ULONGLONG status_at, up_at;
     volatile LONG cb_done, cb_result;
     char up_token[48];
@@ -31,6 +31,7 @@ static void iw_reset(void)
     memset(&g_iw, 0, sizeof g_iw);
     g_iw.status_want = -1;
     g_iw.comment_job = -1;
+    g_iw.mid_from = g_s.mail_mid;
 }
 
 /* the game's thread never waits for it, a frame that finds it taken does nothing and the next one tries again */
@@ -610,6 +611,46 @@ static void iw_worker_take(BYTE *b, volatile LONG *held)
     }
 }
 
+/* what the game files in r\b during play, read only, handed to the app as a stored message it can answer by mid */
+static void iw_arrived(const BYTE *hdr, const char *name, const char *body, int got)
+{
+    static char buf[STORE_BODY_MAX];
+    static mailrec probe;
+    unsigned kind = pc_mail_kind(hdr);
+    storefile f;
+    mailrec *m;
+    if (!(MAIL(hdr)->flags & MAIL_VALID) || !(kind == 1 || message_store_wanted(hdr, 1, 1)) || !g_ig.written.me) return;
+    if (!message_store_owned(hdr, 1, g_ig.written.me) || pc_mail_receipt(hdr) || fx_ignored(hdr) || (!kind && fx_bounced(hdr))) return;
+    if (!body) {
+        memset(&f, 0, sizeof f);
+        memcpy(f.hdr, hdr, sizeof f.hdr);
+        lstrcpynA(f.name, name, sizeof f.name);
+        f.home = g_home;
+        f.sub = 1;
+        f.alt_home = -1;
+        if ((got = message_store_body(&f, buf, sizeof buf)) < (int)MAIL(hdr)->len || got <= 0) return;
+        body = buf;
+    }
+    memset(&probe, 0, sizeof probe);
+    memcpy(probe.hdr, hdr, MAIL_KEY_SIZE);
+    mail_inbox_parse(g_ig.b, &probe, body, got);
+    SecureZeroMemory(buf, sizeof buf);
+    if (!iw_lock()) return;
+    if ((m = mail_inbox_add(hdr)) != NULL) {
+        memcpy(m->subj, probe.subj, sizeof m->subj);
+        memcpy(m->text, probe.text, sizeof m->text);
+        memcpy(m->att, probe.att, sizeof m->att);
+        m->has_att = probe.has_att;
+        m->state = 7;
+        m->stored = 1;
+        m->shome = g_home;
+        lstrcpynA(m->sname, name, sizeof m->sname);
+        iw_changed();
+    }
+    iw_unlock();
+    SecureZeroMemory(&probe, sizeof probe);
+}
+
 static void iw_worker(BYTE *b)
 {
     volatile LONG held = 0;
@@ -635,6 +676,7 @@ static void iw_snapshot(BYTE *b, jw *w, const ig_copy *c)
     static srchrec hits[SEARCH_MAX];
     static char stoken[48], sstate[32];
     static int next, busy, n, kind, total, many;
+    static jw msgs;
     char u8[0x33 * 3 + 1], mine[64];
     int i, k;
     if (iw_lock()) {
@@ -650,8 +692,16 @@ static void iw_snapshot(BYTE *b, jw *w, const ig_copy *c)
         total = g_s.search_total;
         many = g_s.search_many;
         memcpy(hits, g_srch, (size_t)n * sizeof hits[0]);
+        jw_free(&msgs);
+        memset(&msgs, 0, sizeof msgs);
+        for (i = mail_inbox_next(g_iw.mid_from, 1 << 7); i >= 0; i = mail_inbox_next(g_mail[i].mid, 1 << 7))
+            message_store_msg_json(b, &msgs, g_mail[i].hdr, g_mail[i].mid, "stored", -1, pc_mail_kind(g_mail[i].hdr) == 1 ? 0 : -1,
+                                   g_mail[i].subj, g_mail[i].text, g_mail[i].has_att ? g_mail[i].att : NULL);
         iw_unlock();
     }
+    jw_arr(w, "messages");
+    if (!msgs.fail && msgs.n) jw_splice(w, msgs.p, msgs.n);
+    jw_end(w);
     jw_obj(w, "gameWrites");
     jw_bool(w, "send", iw_area(IW_AREA_SEND));
     jw_bool(w, "status", iw_area(IW_AREA_STATUS));

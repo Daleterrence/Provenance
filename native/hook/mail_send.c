@@ -148,6 +148,11 @@ static void mail_send_start(BYTE *b)
 /* FFXI only prints a message's text when it's 300 bytes or less, counted in the Shift-JIS that goes */
 #define TEXT_MAX_BYTES 300
 
+/* polcore encrypts the body in place as it goes, so a plain copy rides behind it for the s\a copy */
+static BYTE *mail_send_plain_at(BYTE *msg) { return msg + MAIL_BUILT_SIZE + ((MAIL(msg)->len + 15) & ~7u); }
+static void mail_send_keep_plain(BYTE *msg) { memcpy(mail_send_plain_at(msg), msg + MAIL_BUILT_SIZE, MAIL(msg)->len); }
+static void mail_send_plain_back(BYTE *msg) { memcpy(msg + MAIL_BUILT_SIZE, mail_send_plain_at(msg), MAIL(msg)->len); }
+static BYTE *mail_send_alloc(int need) { return (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, MAIL_BUILT_SIZE + 2 * (need + 16)); }
 static int mail_send_msg_build(BYTE *b, int kind, unsigned toLo, unsigned toHi, int fromSlot, int toSlot,
                      const char *myName, const char *sj_subj, const char *sj_text, const BYTE *att, int attType)
 {
@@ -156,7 +161,7 @@ static int mail_send_msg_build(BYTE *b, int kind, unsigned toLo, unsigned toHi, 
     int need = lstrlenA(sj_subj) + 1 + lstrlenA(sj_text) + 1 + attLen, n;
     BYTE *msg;
     if (g_s.send_queue_n >= SEND_MAX) return -1;
-    msg = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, MAIL_BUILT_SIZE + need + 8);
+    msg = mail_send_alloc(need);
     if (!msg || ((ULONG_PTR)msg & 7)) {
         if (msg) HeapFree(GetProcessHeap(), 0, msg);
         return -1;
@@ -164,6 +169,7 @@ static int mail_send_msg_build(BYTE *b, int kind, unsigned toLo, unsigned toHi, 
     n = pc_mail_body(b, sj_subj, sj_text, attLen, att, (char *)msg + MAIL_BUILT_SIZE);
     pc_mail_header(b, msg, kind, (unsigned)me, (unsigned)(me >> 32), toLo, toHi, myName, sj_subj,
                    fromSlot, toSlot, 1000, att ? attType : 0, n);
+    mail_send_keep_plain(msg);
     mail_inbox_log_hdr("send", msg);
     g_sq[g_s.send_queue_n].msg = msg;
     g_sq[g_s.send_queue_n].job = -1;
@@ -232,7 +238,10 @@ static void mail_send_pump(BYTE *b)
         if (r == 1) lstrcpyA(st, "sent"); else lstrcpyA(st, requests_failed(r));
         mail_send_result(s->token, st, s->msg);
         if (r == 1) mail_send_sent_record(b, s->msg);
-        if (r == 1 && pc_mail_kind(s->msg) == 0) message_store_sent(b, s->msg);
+        if (r == 1 && pc_mail_kind(s->msg) == 0) {
+            mail_send_plain_back(s->msg);
+            message_store_sent(b, s->msg);
+        }
         ms = GetTickCount64() - s->started;
         base_log("messages: send done -> %d (%ums)\r\n", r, (unsigned)ms);
         mail_send_paced(r, ms);

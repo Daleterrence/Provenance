@@ -361,11 +361,13 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         _applyingSnapshot = true;
         try
         {
-            // an older hook's sampler has no comment in it
+            // an older hook's sampler has no comment in it. What arrived in play joins the hold's last list
+            var arrived = snap.Messages.Where(m => m.Mid > 0 && !_login.Last.Messages.Any(x => x.Mid == m.Mid)).ToList();
             var merged = _login.Last with
             {
                 Friends = snap.Friends, MyStatus = snap.MyStatus, Blocked = snap.Blocked,
                 MyComment = snap.GameWrites is null ? _login.Last.MyComment : snap.MyComment,
+                Messages = arrived.Count > 0 ? [.. _login.Last.Messages, .. arrived] : _login.Last.Messages,
             };
             _login.Last = merged;
             bool chatChanged = _login.Chat is { } chat && MergeGameSends(chat, snap);
@@ -381,8 +383,10 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
                 PopStatusError(GameOffText.Status);
             }
             SettleStatus(snap);
+            KeepGameStatus(snap);
             RefreshPop();
             MyComment = merged.MyComment;
+            UnreadCount = _login.Chat?.Unread ?? 0;
             static string BlockedId(PolBlocked x) => $"{x.Index}/{x.Key}/{x.Name}";
             if (!Blocked.Select(BlockedId).SequenceEqual(merged.Blocked.Select(BlockedId)))
             {
@@ -406,8 +410,17 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private bool MergeGameSends(ChatStore chat, PolSocialSnapshot snap)
     {
         bool changed = !_gameWrites.Send && _login.Sends.FailQueued(chat, "failed:ingame");
+        if (snap.Messages.Count > 0) return MergeChat(chat, snap) | changed;
         var (merged, sendsChanged) = _login.Sync.MergeSends(chat, snap, _pol.Pid, SendBlockedNote is not null);
         return changed | merged | sendsChanged;
+    }
+
+    // the status at the next login is the one last saved, so a change made in the game is kept the same way
+    private void KeepGameStatus(PolSocialSnapshot snap)
+    {
+        if (_login.RequestedStatus is not null || snap.StatusBusy) return;
+        int code = PolStatusText.Code(snap.MyStatus == PolStatus.Busy ? PolStatus.Online : snap.MyStatus);
+        if (_settings.Current.PlayOnlineStatus != code) _settings.SaveChange(s => s.PlayOnlineStatus = code);
     }
 
     private void OnPhaseChanged()
