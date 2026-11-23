@@ -32,7 +32,7 @@ The app is 32-bit, so running your build also needs the x86 .NET 10 Desktop Runt
 ## Licence
 
 Provenance is licensed under the GNU General Public License v3.0, see [LICENSE](LICENSE). The open source software it
-uses, and their licences, are listed in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
+uses, and their licences, are listed in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). Image credits are in [CREDITS.md](CREDITS.md).
 
 Provenance is not affiliated with or endorsed by SQUARE ENIX CO., LTD., or the Windower or Ashita projects.
 
