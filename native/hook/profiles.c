@@ -88,14 +88,12 @@ static int profiles_ffxi_name_ok(const char *s)
         if (!((*s >= 'A' && *s <= 'Z') || (*s >= 'a' && *s <= 'z'))) return 0;
     return n >= 1 && n <= 15;
 }
-static void profiles_search_request(BYTE *b)
+/* 1 when the search is set up and only wants starting */
+static int profiles_search_parse(BYTE *b, char *buf)
 {
-    char buf[256], *p, *tok, *kind, *val, dec[24];
+    char *p, *tok, *kind, *val, dec[24];
     unsigned __int64 hid = 0;
     int k = 0;
-    if (!hold_db_free()) return;
-    if (requests_take(REQ_SEARCH, buf, sizeof buf) < 0) return;
-    g_s.db_last = GetTickCount64();
     p = buf;
     tok = requests_line(&p);
     kind = requests_line(&p);
@@ -106,18 +104,18 @@ static void profiles_search_request(BYTE *b)
     g_s.search_many = 0;
     while (k < 3 && lstrcmpA(kind, g_srch_kinds[k]) != 0) k++;
     g_s.search_kind = k < 3 ? k : SK_HANDLE;
-    if (k == 3) { profiles_search_done("failed:bad request"); return; }
+    if (k == 3) { profiles_search_done("failed:bad request"); return 0; }
     if (k == SK_HANDLE) {
-        if (!peers_ascii_name_ok(val)) { profiles_search_done("failed:bad name"); return; }
-        if (strchr(val, '\'')) { profiles_search_done("failed:quote"); return; }
+        if (!peers_ascii_name_ok(val)) { profiles_search_done("failed:bad name"); return 0; }
+        if (strchr(val, '\'')) { profiles_search_done("failed:quote"); return 0; }
     } else if (k == SK_HID) {
-        if (!profiles_hid_parse(val, &hid)) { profiles_search_done("failed:bad hid"); return; }
+        if (!profiles_hid_parse(val, &hid)) { profiles_search_done("failed:bad hid"); return 0; }
     } else if (!profiles_ffxi_name_ok(val)) {
         profiles_search_done("failed:bad character");
-        return;
+        return 0;
     }
     g_srch_pib = k == SK_CHARACTER ? profiles_character_load_pib(b) : profile_db_load_pib(b);
-    if (!g_srch_pib) { profiles_search_done("failed:no schema"); return; }
+    if (!g_srch_pib) { profiles_search_done("failed:no schema"); return 0; }
     memset(&g_search.cond[0], 0, sizeof g_search.cond[0]);
     if (k == SK_HANDLE) {
         wsprintfA(g_srch_clause, "z_up_name=UPPER(\x04%s\x04)", val);
@@ -135,7 +133,15 @@ static void profiles_search_request(BYTE *b)
     base_log("friends: search %s \"%s\"\r\n", g_srch_kinds[k], val);
     lstrcpyA(g_s.search_state, "searching");
     g_snap_dirty = 1;
-    profiles_search_start(b, &g_search);
+    return 1;
+}
+static void profiles_search_request(BYTE *b)
+{
+    char buf[256];
+    if (!hold_db_free()) return;
+    if (requests_take(REQ_SEARCH, buf, sizeof buf) < 0) return;
+    g_s.db_last = GetTickCount64();
+    if (profiles_search_parse(b, buf)) profiles_search_start(b, &g_search);
 }
 static void profiles_search_pump(BYTE *b, int ctl)
 {

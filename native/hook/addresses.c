@@ -35,6 +35,14 @@
     "6a 00 6a 00 50 52 6a 0a 6a 00 8d 44 24 24 6a 00 50 e8 ?? ?? ?? ?? c3"
 #define SIG_FX_ACCEPT "8b 0d ?? ?? ?? ?? 85 c9 75 06 b8 02 00 00 00 c3 8b 44 24 24 8b 54 24 20 50 8b 44 24 20 52 8b 54 24 20 " \
     "68 ?? ?? ?? ?? 50 8b 44 24 24 68 ?? ?? ?? ?? 52 8b 54 24 28 50 8b 44 24 28 52 8d 54 24 24 50 52 e8 ?? ?? ?? ?? c3"
+#define SIG_FX_UPLOAD "8b 44 24 04 50 6a 00 6a 00 6a 02 e8 ?? ?? ?? ?? 83 c4 04 50 e8 ?? ?? ?? ?? 83 c4 10 c3"
+#define SIG_FX_JOB_LOCKS "8b 4c 24 04 b8 01 00 00 00 d3 e0 8b 0d ?? ?? ?? ?? 23 01 c3"
+#define SIG_FX_ADD_UPLOAD "8b 0d ?? ?? ?? ?? 56 33 f6 33 c0 8b 91 28 01 00 00 2b d6 74 ?? 4a 74 ?? 4a 0f 85 ?? ?? ?? ?? " \
+    "8b 81 2c 01 00 00"
+#define SIG_FX_MAIL_BUSY "a0 ?? ?? ?? ?? 84 c0 74 ?? 8b 0d ?? ?? ?? ?? 6a 7a e8 ?? ?? ?? ?? c3 6a 00 66 c7 41 14 02 00 6a 01 " \
+    "68 ?? ?? ?? ?? b9"
+#define SIG_FX_STATUS "a1 ?? ?? ?? ?? 8b 4c 24 04 39 48 0c 74 1d 8b 50 30 53 8a 5a 01 84 db 5b 75 11 89 48 24 a1 ?? ?? ?? ?? " \
+    "c6 40 34 01 e9"
 
 static struct hook_addr g_addr[ADDRESS_COUNT] = {
     /* starts on the push ebp, a detour past the frame setup leaves the stub's stack a dword off */
@@ -221,6 +229,22 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
         .usual = 0xf72c0, .sig_at = 0xf72c0, .operand = ADDR_MATCH, .sig = SIG_FX_DECLINE },
     [AT_FX_FRIEND_ACCEPT] = { .name = "friend request accept", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
         .usual = 0xf7350, .sig_at = 0xf7350, .operand = ADDR_MATCH, .sig = SIG_FX_ACCEPT },
+    /* the game's own friend list upload, kind 2 of its friend jobs. An upload of my own beside it would lose its rows */
+    [AT_FX_FRIEND_UPLOAD] = { .name = "friend list upload", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
+        .usual = 0xe7a30, .sig_at = 0xe7a30, .operand = ADDR_MATCH, .sig = SIG_FX_UPLOAD },
+    [AT_FX_FRIEND_JOBS] = { .name = "friend jobs", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
+        .usual = 0x4df7b4, .sig_at = 0xf13c0, .operand = 13, .sig = SIG_FX_JOB_LOCKS },
+    [AT_FX_FRIEND_STATE] = { .name = "friend list object", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
+        .usual = 0x4df7b0, .sig_at = 0xe7a60, .operand = 2, .sig = SIG_FX_ADD_UPLOAD },
+    [AT_FX_MAIL_BUSY] = { .name = "mail window busy", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
+        .usual = 0x630fe8, .sig_at = 0x1ff9f0, .operand = 1, .sig = SIG_FX_MAIL_BUSY },
+    [AT_FX_STATUS_SET] = { .name = "status setter", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
+        .usual = 0xf7aa0, .sig_at = 0xf7aa0, .operand = ADDR_MATCH, .sig = SIG_FX_STATUS },
+    [AT_FX_STATUS_OBJ] = { .name = "status object", .module = IN_FFXI, .code = IS_DATA, .required = SKIPPABLE,
+        .usual = 0x4df94c, .sig_at = 0xf7aa0, .operand = 1, .sig = SIG_FX_STATUS },
+    [AT_FX_AWAY_FLAG] = { .name = "away flag", .module = IN_FFXI, .code = IS_CODE, .required = SKIPPABLE,
+        .usual = 0xe46b0, .sig_at = 0xe46b0, .operand = ADDR_MATCH,
+        .sig = "a1 ?? ?? ?? ?? 85 c0 0f 84 ?? ?? ?? ?? 6a 01 6a 01 68 dc 00 00 00 e8 ?? ?? ?? ?? 83 c4 0c 85 c0 0f 84" },
 };
 
 typedef struct {

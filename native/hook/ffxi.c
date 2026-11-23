@@ -36,8 +36,13 @@ typedef int (__cdecl *fx_decline_fn)(DWORD seq, DWORD time, DWORD lo, DWORD hi, 
 typedef int (__cdecl *fx_accept_fn)(DWORD seq, DWORD time, DWORD lo, DWORD hi, const char *typed, const char *title, const char *title_1,
                                     void *cb, int tag);
 
-typedef struct { DWORD lo, hi; int slot; char name[FX_NAME], text[FX_TEXT]; } fx_send;
+typedef struct { DWORD lo, hi; int slot, kind; char name[FX_NAME], text[FX_TEXT], subj[0x84], token[48]; } fx_send;
 typedef struct { DWORD time, seq; BYTE from_slot; } fx_sent_id;
+
+static int iw_answer_ready(BYTE *b);
+static int iw_busy(void);
+static void iw_answer_result(const char *token, const char *state);
+static void iw_send_result(const char *token, const char *state, const BYTE *msg);
 
 static const int g_fx_core[] = { AT_FX_COUNT_CALL, AT_FX_MARK_CALL, AT_FX_ADD_LINE, AT_FX_CHAT_LOG };
 
@@ -91,8 +96,9 @@ static struct {
     void *volatile copies[FX_COPIES];
     fx_request waiting[FX_WAITING], want;
     volatile LONG waiting_lock, ans_state, ans_done, ans_code;
-    int want_yes;
-    ULONGLONG ans_at;
+    int want_yes, cur_kind;
+    ULONGLONG ans_at, want_at;
+    char ans_token[48], cur_token[48];
 } g_fx;
 
 static int fx_missing(void)
@@ -551,6 +557,15 @@ static void fx_req_sync(void)
     fx_req_unlock();
 }
 
+static void fx_answer_want(const fx_request *r, int yes, const char *token)
+{
+    g_fx.want = *r;
+    g_fx.want_yes = yes;
+    g_fx.want_at = GetTickCount64();
+    lstrcpynA(g_fx.ans_token, token, sizeof g_fx.ans_token);
+    g_fx.ans_state = FX_ANS_WANTED;
+}
+
 static BYTE __cdecl fx_answer_callback(int tag, int unused, int code, int extra)
 {
     (void)tag; (void)unused; (void)extra;
@@ -564,6 +579,11 @@ static BYTE __cdecl fx_answer_callback(int tag, int unused, int code, int extra)
 static void fx_answer_say(const char *colour, const char *text)
 {
     if (!g_fx.at_select) fx_print(colour == g_fx_note ? FX_ICON_INFO : FX_ICON_NONE, colour, text, "", "");
+}
+static void fx_answer_fail(const char *state)
+{
+    if (g_fx.ans_token[0]) iw_answer_result(g_fx.ans_token, state);
+    else fx_answer_say(g_fx_red, g_fx_not_answered);
 }
 static void fx_answer_end(void)
 {
@@ -587,9 +607,7 @@ static void fx_answer_command(const char *who, const char *word)
         base_log("ffxi: a friend request answer didn't go, another is still waiting for its reply\r\n");
         return;
     }
-    g_fx.want = r;
-    g_fx.want_yes = yes;
-    g_fx.ans_state = FX_ANS_WANTED;
+    fx_answer_want(&r, yes, "");
 }
 
 static void fx_answer_start(BYTE *b)
@@ -618,14 +636,17 @@ static void fx_answer_start(BYTE *b)
     if (!r) return;
     fx_answer_end();
     base_log("ffxi: a friend request answer didn't start (%d)\r\n", r);
-    fx_answer_say(g_fx_red, g_fx_not_answered);
+    fx_answer_fail(requests_failed(r));
+    g_fx.ans_token[0] = 0;
 }
 
 static void fx_answer_went(const char *how)
 {
     fx_req_drop(&g_fx.want);
-    base_log("ffxi: a friend request was %s%s\r\n", g_fx.want_yes ? "accepted" : "declined", how);
-    fx_answer_say(g_fx_note, g_fx.want_yes ? "You accepted the friend request." : "You declined the friend request.");
+    base_log("ffxi: a friend request was %s%s%s\r\n", g_fx.want_yes ? "accepted" : "declined", how,
+             g_fx.ans_token[0] ? " (from Provenance)" : "");
+    if (g_fx.ans_token[0]) iw_answer_result(g_fx.ans_token, "sent");
+    else fx_answer_say(g_fx_note, g_fx.want_yes ? "You accepted the friend request." : "You declined the friend request.");
 }
 
 /* the callback only leaves its code, the lines are printed from here */
@@ -636,7 +657,17 @@ static void fx_answer_pump(BYTE *b)
         if (g_fx.off) {
             fx_answer_end();
             base_log("ffxi: a friend request answer didn't start, the hook's switched off\r\n");
-            fx_answer_say(g_fx_red, g_fx_not_answered);
+            fx_answer_fail("failed:ingame");
+            g_fx.ans_token[0] = 0;
+            return;
+        }
+        /* the game's own friend jobs give up part way if they meet my upload, so nothing starts beside one */
+        if (!iw_answer_ready(b)) {
+            if (GetTickCount64() - g_fx.want_at < FX_ANSWER_MS) return;
+            fx_answer_end();
+            base_log("ffxi: a friend request answer didn't start, the game's friend list stayed busy\r\n");
+            fx_answer_fail("failed:busy");
+            g_fx.ans_token[0] = 0;
             return;
         }
         fx_answer_start(b);
@@ -646,6 +677,7 @@ static void fx_answer_pump(BYTE *b)
         int went = g_fx.ans_done && !g_fx.ans_code && !g_fx.off;
         fx_answer_end();
         if (went) fx_answer_went(", the reply came late");
+        g_fx.ans_token[0] = 0;
     }
     if (g_fx.ans_state != FX_ANS_RUNNING) return;
     if (g_fx.ans_done) {
@@ -655,8 +687,9 @@ static void fx_answer_pump(BYTE *b)
             fx_answer_went("");
         } else {
             base_log("ffxi: a friend request answer failed (%d)\r\n", code);
-            fx_answer_say(g_fx_red, g_fx_not_answered);
+            fx_answer_fail(requests_failed(code));
         }
+        g_fx.ans_token[0] = 0;
     } else if (GetTickCount64() - g_fx.ans_at >= FX_ANSWER_MS) {
         fx_answer_end();
         if (!g_fx.off) {
@@ -664,7 +697,8 @@ static void fx_answer_pump(BYTE *b)
             g_fx.ans_at = GetTickCount64();
         }
         base_log("ffxi: a friend request answer got no reply in 30s\r\n");
-        fx_answer_say(g_fx_red, g_fx_not_answered);
+        fx_answer_fail("failed:no reply");
+        if (g_fx.off) g_fx.ans_token[0] = 0;
     }
 }
 
@@ -733,17 +767,18 @@ static BYTE *fx_build(BYTE *b, const fx_send *s)
     char me_name[16];
     unsigned __int64 me = pc_my_id(b);
     int my_slot = peers_my_handle(b, me_name), n;
-    BYTE *msg = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, MAIL_BUILT_SIZE + lstrlenA(s->text) + 16);
+    BYTE *msg = (BYTE *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, MAIL_BUILT_SIZE + lstrlenA(s->subj) + lstrlenA(s->text) + 16);
     if (!msg || ((ULONG_PTR)msg & 7)) {
         if (msg) HeapFree(GetProcessHeap(), 0, msg);
         return NULL;
     }
-    n = pc_mail_body(b, "", s->text, 0, NULL, (char *)msg + MAIL_BUILT_SIZE);
-    pc_mail_header(b, msg, 0, (unsigned)me, (unsigned)(me >> 32), s->lo, s->hi, me_name, "", my_slot, s->slot, 1000, 0, n);
+    n = pc_mail_body(b, s->subj, s->text, 0, NULL, (char *)msg + MAIL_BUILT_SIZE);
+    pc_mail_header(b, msg, s->kind, (unsigned)me, (unsigned)(me >> 32), s->lo, s->hi, me_name, s->subj, my_slot, s->slot, 1000, 0, n);
     return msg;
 }
 
-static void fx_send_done(int ok)
+/* why is what the app is told when one of its own fails, a /m gets the red line */
+static void fx_send_done(int ok, const char *why)
 {
     int i;
     if (ok) {
@@ -753,16 +788,19 @@ static void fx_send_done(int ok)
         id->from_slot = MAIL(g_fx.msg)->from_slot;
         InterlockedIncrement(&g_fx.nsent_ids);
     }
-    for (i = 0; ok && g_fx.msg && i < FX_COPIES; i++)
+    if (g_fx.cur_token[0]) iw_send_result(g_fx.cur_token, ok ? "sent" : why, ok ? g_fx.msg : NULL);
+    for (i = 0; ok && g_fx.msg && !g_fx.cur_kind && i < FX_COPIES; i++)
         if (!InterlockedCompareExchangePointer(&g_fx.copies[i], g_fx.msg, NULL)) {
             g_fx.msg = NULL;
             SetEvent(g_ig.wake);
         }
-    if (ok && g_fx.msg) base_log("ffxi: no room for a sent message's s\\a copy, it isn't kept\r\n");
+    if (ok && g_fx.msg && !g_fx.cur_kind) base_log("ffxi: no room for a sent message's s\a copy, it isn't kept\r\n");
     if (g_fx.msg) HeapFree(GetProcessHeap(), 0, g_fx.msg);
     g_fx.msg = NULL;
     g_fx.job = -1;
-    if (!ok) fx_print(FX_ICON_NONE, g_fx_red, g_fx_not_sent, "", "");
+    if (!ok && !g_fx.cur_token[0]) fx_print(FX_ICON_NONE, g_fx_red, g_fx_not_sent, "", "");
+    g_fx.cur_token[0] = 0;
+    g_fx.cur_kind = 0;
 }
 
 /* a job's state machine only moves inside its poll, so it's polled every callback while it's going */
@@ -770,39 +808,44 @@ static void fx_send_pump(BYTE *b)
 {
     ULONGLONG now = GetTickCount64();
     int used = 0, total = 4, r, why;
+    const char *no;
     if (g_fx.job >= 0) {
         if ((r = pc_mail_send_check(b, g_fx.job)) == 0) return;
         if (r == NO_SLOT) {
             g_fx.job = -1;
             return;
         }
-        base_log("ffxi: a chat line message %s (%d)\r\n", r == 1 ? "went" : "didn't go", r);
+        base_log("ffxi: a %s %s (%d)\r\n", g_fx.cur_token[0] ? "message from Provenance" : "chat line message", r == 1 ? "went" : "didn't go", r);
         mail_send_paced(r, now - g_fx.started);
-        fx_send_done(r == 1);
+        fx_send_done(r == 1, requests_failed(r));
         return;
     }
     if (!g_fx.msg) {
         if (!g_fx.nsends || now - g_fx.sent_at < FX_SEND_GAP_MS) return;
         why = mail_send_pace_check(&g_s.pace, now);
         if (why == PACE_HELD || why == PACE_MIN) return;
+        lstrcpynA(g_fx.cur_token, g_fx.sends[0].token, sizeof g_fx.cur_token);
+        g_fx.cur_kind = g_fx.sends[0].kind;
         g_fx.msg = why == PACE_OK ? fx_build(b, &g_fx.sends[0]) : NULL;
         memmove(&g_fx.sends[0], &g_fx.sends[1], (FX_SENDS - 1) * sizeof g_fx.sends[0]);
         g_fx.nsends--;
         if (!g_fx.msg) {
-            if (why != PACE_OK) base_log("ffxi: a chat line message didn't go, %s\r\n", mail_send_pace_refusal());
-            fx_send_done(0);
+            no = why == PACE_OK ? "failed:alloc" : mail_send_pace_refusal();
+            if (why != PACE_OK) base_log("ffxi: a chat line message didn't go, %s\r\n", no);
+            fx_send_done(0, no ? no : "failed:stopped");
             return;
         }
+        if (g_fx.cur_token[0]) iw_send_result(g_fx.cur_token, "sending", NULL);
     }
     if (pc_has(b, SV_JOB_SLOTS)) pc_job_slots(b, &used, &total);
-    if (total - used < 3) return;
+    if (total - used < 3 || iw_busy()) return;
     g_fx.sent_at = now;
     r = pc_mail_send(b, g_fx.msg);
     if (r == NO_SLOT) return;
     if (r < 0) {
         base_log("ffxi: a chat line message didn't start (%d)\r\n", r);
         if (r == -0x153a || r == -0x1540) mail_send_paced(r, 0);
-        fx_send_done(0);
+        fx_send_done(0, requests_failed(r));
         return;
     }
     g_fx.job = r;
@@ -817,17 +860,21 @@ static void fx_send_wind_down(BYTE *b)
     if (g_fx.job >= 0 && (r = pc_mail_send_check(b, g_fx.job)) != 0) {
         base_log("ffxi: a chat line message %s after the fault (%d)\r\n", r == 1 ? "went" : "didn't go", r);
         mail_send_paced(r, GetTickCount64() - g_fx.started);
-        fx_send_done(r == 1);
+        fx_send_done(r == 1, requests_failed(r));
     }
-    if (g_fx.job < 0 && g_fx.msg) fx_send_done(0);
-    for (; g_fx.nsends; g_fx.nsends--) fx_print(FX_ICON_NONE, g_fx_red, g_fx_not_sent, "", "");
+    if (g_fx.job < 0 && g_fx.msg) fx_send_done(0, "failed:ingame");
+    for (; g_fx.nsends; g_fx.nsends--) {
+        const fx_send *s = &g_fx.sends[g_fx.nsends - 1];
+        if (s->token[0]) iw_send_result(s->token, "failed:ingame", NULL);
+        else fx_print(FX_ICON_NONE, g_fx_red, g_fx_not_sent, "", "");
+    }
     for (; g_fx.unsent; g_fx.unsent--) fx_print(FX_ICON_NONE, g_fx_red, g_fx_not_sent, "", "");
 }
 
 /* game thread */
 static void fx_poll(BYTE *b)
 {
-    if (!g_fx.watching || !g_fx.commands) return;
+    if (!g_fx.watching) return;
     __try {
         if (g_fx.off) {
             fx_send_wind_down(b);
@@ -845,7 +892,11 @@ static void fx_poll(BYTE *b)
         /* one already going is left for the wind-down to poll, unless the wind-down's what faulted. A dropped buffer stays,
            polcore may still have it */
         if (g_fx.job < 0 || g_fx.off) {
-            if (g_fx.msg && g_fx.job < 0 && !g_fx.off) g_fx.unsent++;
+            if (g_fx.msg && g_fx.job < 0 && !g_fx.off) {
+                if (g_fx.cur_token[0]) iw_send_result(g_fx.cur_token, "failed:ingame", NULL);
+                else g_fx.unsent++;
+            }
+            g_fx.cur_token[0] = 0;
             g_fx.job = -1;
             g_fx.msg = NULL;
         }
@@ -1125,7 +1176,7 @@ static void fx_requests(BYTE *b)
 {
     __declspec(align(8)) BYTE hdr[sizeof(pol_mail)];
     int i;
-    if (!fx_answers()) return;
+    if (!pc_addr_found(AT_FX_FRIEND_DECLINE) || !pc_addr_found(AT_FX_FRIEND_ACCEPT)) return;
     for (i = 0; g_ig.written.me && i < g_fx.nseen; i++) {
         fx_seen_rec *s = &g_fx.seen[i];
         fx_request r;
@@ -1587,13 +1638,11 @@ static void fx_session_up(void)
 static int fx_wait(HANDLE wake, DWORD ms)
 {
     HANDLE hs[2];
-    if (!g_fx.change) {
-        WaitForSingleObject(wake, ms);
-        return 0;
-    }
+    DWORD r;
+    if (!g_fx.change) return WaitForSingleObject(wake, ms) == WAIT_TIMEOUT ? 2 : 0;
     hs[0] = wake;
     hs[1] = g_fx.change;
-    if (WaitForMultipleObjects(2, hs, FALSE, ms) != WAIT_OBJECT_0 + 1) return 0;
+    if ((r = WaitForMultipleObjects(2, hs, FALSE, ms)) != WAIT_OBJECT_0 + 1) return r == WAIT_TIMEOUT ? 2 : 0;
     g_fx.dirty = 1;
     FindNextChangeNotification(g_fx.change);
     return 1;

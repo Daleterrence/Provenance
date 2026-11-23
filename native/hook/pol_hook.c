@@ -39,6 +39,7 @@
 #include "snapshot.c"
 #include "ingame.c"
 #include "ffxi.c"
+#include "ingame_writes.c"
 #include "lobby.c"
 #include "hold.c"
 

@@ -1,6 +1,6 @@
 /* keeps the friends list up to date while the game runs. POLL's callback copies polcore's rows (microseconds, on the
    game's thread) and a worker writes them out. Any fault switches it off for the rest of the game. */
-enum { IG_FRIENDS = 200, IG_IGNORES = 100, IG_SAMPLE_MS = 500, IG_BEAT_MS = 5000, IG_RETRY_MS = 250 };
+enum { IG_FRIENDS = 200, IG_IGNORES = 100, IG_SAMPLE_MS = 500, IG_BEAT_MS = 5000, IG_RETRY_MS = 250, IW_BEAT_MS = 150 };
 
 typedef struct ig_copy {
     pol_friend friends[IG_FRIENDS];
@@ -9,6 +9,7 @@ typedef struct ig_copy {
     pol_handle handle;
     unsigned __int64 me;
     int status, have_handle;
+    WCHAR comment[0x34];
 } ig_copy;
 
 typedef void (__cdecl *ig_poll_fn)(int);
@@ -25,6 +26,11 @@ static void fx_worker(BYTE *b);
 static int fx_wait(HANDLE wake, DWORD ms);
 static void fx_stop(void);
 static void fx_reset(void);
+static void iw_poll(BYTE *b);
+static void iw_worker(BYTE *b);
+static int iw_quick(void);
+static void iw_snapshot(BYTE *b, jw *w, const ig_copy *c);
+static void iw_reset(void);
 
 static struct {
     BYTE *b;
@@ -51,6 +57,9 @@ static void ig_copy_read(BYTE *b, ig_copy *c)
     slot = pc_current_handle_or(b, -1);
     if (slot < 0) slot = g_my_slot;
     c->have_handle = slot >= 0 && pc_has(b, SV_GET_HANDLE) && pc_get_handle(b, (unsigned)slot, &c->handle) == 0;
+    memset(c->comment, 0, sizeof c->comment);
+    if (pc_has(b, SV_MY_COMMENT)) pc_my_comment(b, -2, c->comment);
+    c->comment[0x33] = 0;
 }
 
 static int ig_write_snapshot(BYTE *b, const ig_copy *c, int beat)
@@ -72,6 +81,7 @@ static int ig_write_snapshot(BYTE *b, const ig_copy *c, int beat)
     jw_uint(&w, "myPic", c->have_handle ? c->handle.pic : 0);
     snapshot_blocked(b, &w, c->ignores);
     snapshot_friends(b, &w, c->friends, c->extras, mine);
+    iw_snapshot(b, &w, c);
     jw_end(&w);
     if (!w.fail) ok = snapshot_write(&w);
     jw_free(&w);
@@ -170,7 +180,7 @@ static void __cdecl ig_poll(int unused)
     } __except (ig_filter(GetExceptionInformation())) {
         ig_fault("game thread", 1);
     }
-    fx_poll(g_ig.b);
+    iw_poll(g_ig.b);
     /* with the friends list off it's only here for the chat's calls to go back and for the lobby */
     if (g_ig.off && !fx_patched() && !lb_wanted()) ig_disarm();
 }
@@ -186,15 +196,18 @@ static int ig_flush(void)
 
 static DWORD WINAPI ig_worker(void *unused)
 {
-    int ok = 1, messages;
+    int ok = 1, woke;
     ULONGLONG flushed = 0;
     (void)unused;
     while (!g_ig.stop) {
-        messages = fx_wait(g_ig.wake, ok ? IG_BEAT_MS : IG_RETRY_MS);
+        woke = fx_wait(g_ig.wake, !ok ? IG_RETRY_MS : iw_quick() ? IW_BEAT_MS : IG_BEAT_MS);
         if (g_ig.stop) break;
         if (!g_ig.off) {
-            /* r\b changing on its own is no reason to write the friends out again, unless the beat's due */
-            if (!messages || !ok || GetTickCount64() - flushed >= IG_BEAT_MS) {
+            iw_worker(g_ig.b);
+            /* r\b changing on its own, or the quick beat for the app's requests, is no reason to write the friends out
+               again unless something changed or the beat's due */
+            if (!woke || g_snap_dirty || !ok || GetTickCount64() - flushed >= IG_BEAT_MS) {
+                g_snap_dirty = 0;
                 flushed = GetTickCount64();
                 __try {
                     ok = ig_flush();
@@ -252,6 +265,7 @@ static void ingame_start(BYTE *b)
     memset(&g_ig, 0, sizeof g_ig);
     g_ig.lobby_only = !friends;
     fx_reset();
+    iw_reset();
     InitializeCriticalSection(&g_ig.cs);
     g_ig.b = b;
     g_ig.slot = (void **)pc_addr_of(b, AT_POLL_CALLBACK);
