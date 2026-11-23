@@ -410,6 +410,7 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
     private bool MergeGameSends(ChatStore chat, PolSocialSnapshot snap)
     {
         bool changed = !_gameWrites.Send && _login.Sends.FailQueued(chat, "failed:ingame");
+        changed |= ChatSync.MergeGameSent(chat, snap, snap.GameSent);
         if (snap.Messages.Count > 0) return MergeChat(chat, snap) | changed;
         var (merged, sendsChanged) = _login.Sync.MergeSends(chat, snap, _pol.Pid, SendBlockedNote is not null);
         return changed | merged | sendsChanged;

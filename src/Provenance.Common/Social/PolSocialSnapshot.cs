@@ -36,6 +36,8 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int 
     public IEnumerable<PolSendResult> AllSends => SendResults.Append(new PolSendResult(SendJob.Token, SendJob.State));
     public IReadOnlyList<PolQueuedSend> SendQueue { get; init; } = [];
     public IReadOnlyList<PolReturnedSend> Returned { get; init; } = [];
+    // lines typed in the game that went whilst it ran, from the sampler
+    public IReadOnlyList<PolSentLine> GameSent { get; init; } = [];
 
     public string? SendStateFor(string? token)
     {

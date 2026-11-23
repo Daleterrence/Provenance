@@ -26,8 +26,14 @@ static struct {
 } g_iw = { .status_want = -1, .comment_job = -1 };
 static const char *g_iw_step = "";
 
+enum { IW_SENT_KEEP = 16, IW_SENT_BODY = 0x200 };
+typedef struct { BYTE hdr[sizeof(pol_mail)]; char body[IW_SENT_BODY]; int len; } iw_sent;
+static iw_sent g_iw_sent[IW_SENT_KEEP];
+static int g_iw_sent_n, g_iw_sent_next;
+
 static void iw_reset(void)
 {
+    g_iw_sent_n = g_iw_sent_next = 0;
     memset(&g_iw, 0, sizeof g_iw);
     g_iw.status_want = -1;
     g_iw.comment_job = -1;
@@ -80,6 +86,20 @@ static void iw_send_result(const char *token, const char *state, const BYTE *msg
     g_iw.hist_next = (g_iw.hist_next + 1) % SEND_HIST;
 }
 static void iw_answer_result(const char *token, const char *state) { iw_send_result(token, state, NULL); }
+
+/* a /m or /rm that went, kept for the app's own conversation. Game thread, under the lock */
+static void iw_game_sent(const BYTE *msg)
+{
+    iw_sent *s = &g_iw_sent[g_iw_sent_next];
+    int n = (int)MAIL(msg)->len;
+    if (n <= 0 || n > IW_SENT_BODY) return;
+    memcpy(s->hdr, msg, sizeof s->hdr);
+    memcpy(s->body, msg + MAIL_BUILT_SIZE, (size_t)n);
+    s->len = n;
+    g_iw_sent_next = (g_iw_sent_next + 1) % IW_SENT_KEEP;
+    if (g_iw_sent_n < IW_SENT_KEEP) g_iw_sent_n++;
+    iw_changed();
+}
 
 /* undecided till FFXiMain's been looked at, so a request made early waits for it rather than being turned down */
 static int iw_base(void)
@@ -612,15 +632,17 @@ static void iw_worker_take(BYTE *b, volatile LONG *held)
 }
 
 /* what the game files in r\b during play, read only, handed to the app as a stored message it can answer by mid */
-static void iw_arrived(const BYTE *hdr, const char *name, const char *body, int got)
+/* 0 while its file's still being written, so it's looked at again */
+static int iw_arrived(const BYTE *hdr, const char *name, const char *body, int got)
 {
     static char buf[STORE_BODY_MAX];
     static mailrec probe;
     unsigned kind = pc_mail_kind(hdr);
     storefile f;
     mailrec *m;
-    if (!(MAIL(hdr)->flags & MAIL_VALID) || !(kind == 1 || message_store_wanted(hdr, 1, 1)) || !g_ig.written.me) return;
-    if (!message_store_owned(hdr, 1, g_ig.written.me) || pc_mail_receipt(hdr) || fx_ignored(hdr) || (!kind && fx_bounced(hdr))) return;
+    int handed = 0;
+    if (!(MAIL(hdr)->flags & MAIL_VALID) || !(kind == 1 || message_store_wanted(hdr, 1, 1)) || !g_ig.written.me) return 1;
+    if (!message_store_owned(hdr, 1, g_ig.written.me) || pc_mail_receipt(hdr) || fx_ignored(hdr) || (!kind && fx_bounced(hdr))) return 1;
     if (!body) {
         memset(&f, 0, sizeof f);
         memcpy(f.hdr, hdr, sizeof f.hdr);
@@ -628,15 +650,16 @@ static void iw_arrived(const BYTE *hdr, const char *name, const char *body, int 
         f.home = g_home;
         f.sub = 1;
         f.alt_home = -1;
-        if ((got = message_store_body(&f, buf, sizeof buf)) < (int)MAIL(hdr)->len || got <= 0) return;
+        if ((got = message_store_body(&f, buf, sizeof buf)) < (int)MAIL(hdr)->len || got <= 0) return 0;
         body = buf;
     }
     memset(&probe, 0, sizeof probe);
     memcpy(probe.hdr, hdr, MAIL_KEY_SIZE);
     mail_inbox_parse(g_ig.b, &probe, body, got);
     SecureZeroMemory(buf, sizeof buf);
-    if (!iw_lock()) return;
+    if (!iw_lock()) return 0;
     if ((m = mail_inbox_add(hdr)) != NULL) {
+        handed = 1;
         memcpy(m->subj, probe.subj, sizeof m->subj);
         memcpy(m->text, probe.text, sizeof m->text);
         memcpy(m->att, probe.att, sizeof m->att);
@@ -649,6 +672,8 @@ static void iw_arrived(const BYTE *hdr, const char *name, const char *body, int 
     }
     iw_unlock();
     SecureZeroMemory(&probe, sizeof probe);
+    if (handed) base_log("ingame: a %s that came in the game is handed to Provenance\r\n", !kind ? "message" : kind == 1 ? "friend request" : "notice");
+    return 1;
 }
 
 static void iw_worker(BYTE *b)
@@ -669,6 +694,38 @@ static void iw_worker(BYTE *b)
     }
 }
 
+/* the same shape as the login import's sent lines, so the import finds it already there */
+static void iw_sent_json(BYTE *b, jw *w, const ig_copy *c, const iw_sent *s)
+{
+    static mailrec probe;
+    const BYTE *h = s->hdr;
+    char sk[17];
+    int row;
+    memset(&probe, 0, sizeof probe);
+    memcpy(probe.hdr, h, MAIL_KEY_SIZE);
+    mail_inbox_parse(b, &probe, s->body, s->len);
+    peers_key(b, MAIL(h)->to_lo, MAIL(h)->to_hi, MAIL(h)->to_slot, sk);
+    for (row = 0; row < IG_FRIENDS; row++)
+        if (pc_friend_valid(&c->friends[row]) && c->friends[row].id_lo == MAIL(h)->to_lo && c->friends[row].id_hi == MAIL(h)->to_hi &&
+            pc_friend_slot(&c->friends[row]) == MAIL(h)->to_slot)
+            break;
+    jw_obj(w, NULL);
+    jw_int(w, "mid", 0);
+    if (row < IG_FRIENDS) jw_sjis(w, "to", b, (const BYTE *)c->friends[row].name, 0x0f, 64);
+    else jw_raw(w, "to", "\"\"");
+    jw_lit(w, "toKey", sk);
+    jw_uint(w, "toSlot", MAIL(h)->to_slot);
+    jw_uint(w, "fromSlot", MAIL(h)->from_slot);
+    jw_bool(w, "toOther", 1);
+    jw_uint(w, "time", MAIL(h)->time);
+    jw_uint(w, "seq", MAIL(h)->seq);
+    jw_lit(w, "state", "sent");
+    jw_text(w, "subject", probe.subj);
+    jw_text(w, "text", probe.text);
+    jw_end(w);
+    SecureZeroMemory(&probe, sizeof probe);
+}
+
 static void iw_snapshot(BYTE *b, jw *w, const ig_copy *c)
 {
     static iw_job send, edit;
@@ -677,6 +734,8 @@ static void iw_snapshot(BYTE *b, jw *w, const ig_copy *c)
     static char stoken[48], sstate[32];
     static int next, busy, n, kind, total, many;
     static jw msgs;
+    static iw_sent sent[IW_SENT_KEEP];
+    static int sent_n;
     char u8[0x33 * 3 + 1], mine[64];
     int i, k;
     if (iw_lock()) {
@@ -697,10 +756,15 @@ static void iw_snapshot(BYTE *b, jw *w, const ig_copy *c)
         for (i = mail_inbox_next(g_iw.mid_from, 1 << 7); i >= 0; i = mail_inbox_next(g_mail[i].mid, 1 << 7))
             message_store_msg_json(b, &msgs, g_mail[i].hdr, g_mail[i].mid, "stored", -1, pc_mail_kind(g_mail[i].hdr) == 1 ? 0 : -1,
                                    g_mail[i].subj, g_mail[i].text, g_mail[i].has_att ? g_mail[i].att : NULL);
+        for (sent_n = 0; sent_n < g_iw_sent_n; sent_n++)
+            sent[sent_n] = g_iw_sent[(g_iw_sent_next + IW_SENT_KEEP - g_iw_sent_n + sent_n) % IW_SENT_KEEP];
         iw_unlock();
     }
     jw_arr(w, "messages");
     if (!msgs.fail && msgs.n) jw_splice(w, msgs.p, msgs.n);
+    jw_end(w);
+    jw_arr(w, "gameSent");
+    for (i = 0; i < sent_n; i++) iw_sent_json(b, w, c, &sent[i]);
     jw_end(w);
     jw_obj(w, "gameWrites");
     jw_bool(w, "send", iw_area(IW_AREA_SEND));

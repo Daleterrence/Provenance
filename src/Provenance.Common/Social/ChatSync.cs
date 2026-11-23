@@ -185,18 +185,24 @@ public sealed class ChatSync(MailSendQueue sends)
 
     private static bool SaysWho(int kind) => kind is not (PolMessage.KindGroupRemoved or PolMessage.KindGroupDisbanded);
 
-    private static bool MergeStored(ChatStore chat, PolSocialSnapshot snap, Func<PolMessage, string?> noticeText,
-                                    HashSet<int> toRead, Dictionary<string, int> mids)
+    public static bool MergeGameSent(ChatStore chat, PolSocialSnapshot snap, IEnumerable<PolSentLine> lines)
     {
         bool changed = false;
         var hasSentLine = chat.SentLines();
-        foreach (var s in snap.Stored!.Sent)
+        foreach (var s in lines)
         {
             if (hasSentLine(s.Time, s.Seq, s.FromSlot)) continue;
             var to = snap.Friends.FirstOrDefault(f => f.Key.Length > 0 && f.Key == s.ToKey)?.Name ??
                      (s.To.Length > 0 ? s.To : chat.NameFor(s.ToKey));
             if (to.Length > 0 || s.ToKey.Length > 0) changed |= chat.AddGameSent(to, s);
         }
+        return changed;
+    }
+
+    private static bool MergeStored(ChatStore chat, PolSocialSnapshot snap, Func<PolMessage, string?> noticeText,
+                                    HashSet<int> toRead, Dictionary<string, int> mids)
+    {
+        bool changed = MergeGameSent(chat, snap, snap.Stored!.Sent);
         foreach (var m in snap.Stored.Received)
         {
             if (m.IsChat && m.FromKey.Length > 0 && snap.Blocked.Any(x => x.Key == m.FromKey)) continue;

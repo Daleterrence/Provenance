@@ -36,6 +36,7 @@ public static class SocialSnapshotFiles
                 Sampler = Str(root, "sampler"),
                 GameWrites = Obj(root, "gameWrites") is { ValueKind: JsonValueKind.Object } gw
                     ? new GameWrites(Bool(gw, "send"), Bool(gw, "status"), Bool(gw, "edits")) : null,
+                GameSent = Arr(root, "gameSent", ReadSent),
                 GameFriends = Bool(root, "gameFriends"),
                 Beat = Int(root, "beat", 0),
                 Lean = Bool(root, "lean"),
@@ -82,6 +83,10 @@ public static class SocialSnapshotFiles
         }
         catch { return null; }
     }
+
+    private static PolSentLine ReadSent(JsonElement s) =>
+        new(Str(s, "to"), Str(s, "toKey"), (int)Long(s, "toSlot"), Long(s, "time"), Long(s, "seq"), Str(s, "state"),
+            Str(s, "subject"), Str(s, "text")) { FromSlot = Int(s, "fromSlot", -1), ToOther = Bool(s, "toOther") };
 
     private static PolMessage ReadMessage(JsonElement m) =>
         new(Str(m, "from"), (int)Long(m, "fromSlot"), (int)Long(m, "kind"), Long(m, "time"), Long(m, "seq"), Str(m, "state"),
@@ -149,10 +154,7 @@ public static class SocialSnapshotFiles
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            return new PolStoredLines(Arr(root, "messages", ReadMessage),
-                Arr(root, "gameSent", s => new PolSentLine(Str(s, "to"), Str(s, "toKey"), (int)Long(s, "toSlot"),
-                    Long(s, "time"), Long(s, "seq"), Str(s, "state"), Str(s, "subject"), Str(s, "text"))
-                    { FromSlot = Int(s, "fromSlot", -1), ToOther = Bool(s, "toOther") }));
+            return new PolStoredLines(Arr(root, "messages", ReadMessage), Arr(root, "gameSent", ReadSent));
         }
         catch { return null; }
     }
