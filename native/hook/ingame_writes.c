@@ -564,7 +564,7 @@ static void iw_poll(BYTE *b)
 
 static void iw_worker(BYTE *b)
 {
-    static const struct { const char *ext; int area; } rows[IW_BOXES] = {
+    static const struct { const char *ext; int area; } rows[] = {
         { REQ_SEND, IW_AREA_SEND }, { REQ_STATUS, IW_AREA_STATUS }, { REQ_FRIEND, IW_AREA_EDITS }, { REQ_COMMENT, IW_AREA_EDITS },
         { REQ_ANSWER, IW_AREA_EDITS }, { REQ_SEARCH, IW_AREA_EDITS },
     };
