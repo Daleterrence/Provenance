@@ -37,6 +37,7 @@ public static class SocialSnapshotFiles
                 GameWrites = Obj(root, "gameWrites") is { ValueKind: JsonValueKind.Object } gw
                     ? new GameWrites(Bool(gw, "send"), Bool(gw, "status"), Bool(gw, "edits")) : null,
                 GameSent = Arr(root, "gameSent", ReadSent),
+                AnsweredInGame = Arr(root, "answeredInGame", a => a.TryGetInt32(out var mid) ? mid : 0),
                 GameFriends = Bool(root, "gameFriends"),
                 Beat = Int(root, "beat", 0),
                 Lean = Bool(root, "lean"),

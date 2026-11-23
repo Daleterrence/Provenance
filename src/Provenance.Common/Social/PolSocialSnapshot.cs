@@ -38,6 +38,8 @@ public sealed record PolSocialSnapshot(PolStatus MyStatus, string MyHandle, int 
     public IReadOnlyList<PolReturnedSend> Returned { get; init; } = [];
     // lines typed in the game that went whilst it ran, from the sampler
     public IReadOnlyList<PolSentLine> GameSent { get; init; } = [];
+    // the mids of requests the game answered itself whilst it ran
+    public IReadOnlyList<int> AnsweredInGame { get; init; } = [];
 
     public string? SendStateFor(string? token)
     {

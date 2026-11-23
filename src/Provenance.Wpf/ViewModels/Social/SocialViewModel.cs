@@ -373,6 +373,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
             bool chatChanged = _login.Chat is { } chat && MergeGameSends(chat, snap);
             ApplyEditState(snap);
             Search.Apply(snap);
+            foreach (var mid in snap.AnsweredInGame)
+                if (!_login.Answered.Contains(mid)) Answered(mid, ack: false);
             ZoneSearch?.Tick(merged.Friends);
             Lookups.Seen(merged.Friends);
             RebuildFriends(merged);

@@ -31,9 +31,13 @@ typedef struct { BYTE hdr[sizeof(pol_mail)]; char body[IW_SENT_BODY]; int len; }
 static iw_sent g_iw_sent[IW_SENT_KEEP];
 static int g_iw_sent_n, g_iw_sent_next;
 
+enum { IW_REQ_KEEP = 64 };
+static struct { int mid, gone; } g_iw_req[IW_REQ_KEEP];
+static int g_iw_req_n;
+
 static void iw_reset(void)
 {
-    g_iw_sent_n = g_iw_sent_next = 0;
+    g_iw_sent_n = g_iw_sent_next = g_iw_req_n = 0;
     memset(&g_iw, 0, sizeof g_iw);
     g_iw.status_want = -1;
     g_iw.comment_job = -1;
@@ -676,6 +680,27 @@ static int iw_arrived(const BYTE *hdr, const char *name, const char *body, int g
     return 1;
 }
 
+/* the game moves a request it's answered from r\b to r\a, so one seen there and gone since is done with */
+static void iw_requests_seen(void)
+{
+    int i, k, at, gone;
+    if (!iw_lock()) return;
+    for (i = 0; i < g_s.mail_n; i++) {
+        if (pc_mail_kind(g_mail[i].hdr) != 1) continue;
+        for (at = -1, k = 0; k < g_iw_req_n; k++)
+            if (g_iw_req[k].mid == g_mail[i].mid) at = k;
+        gone = fx_seen_same(g_mail[i].hdr) < 0;
+        if (at < 0 && !gone && g_iw_req_n < IW_REQ_KEEP) {
+            g_iw_req[g_iw_req_n].mid = g_mail[i].mid;
+            g_iw_req[g_iw_req_n++].gone = 0;
+        } else if (at >= 0 && gone && !g_iw_req[at].gone) {
+            g_iw_req[at].gone = 1;
+            iw_changed();
+        }
+    }
+    iw_unlock();
+}
+
 static void iw_worker(BYTE *b)
 {
     volatile LONG held = 0;
@@ -735,7 +760,7 @@ static void iw_snapshot(BYTE *b, jw *w, const ig_copy *c)
     static int next, busy, n, kind, total, many;
     static jw msgs;
     static iw_sent sent[IW_SENT_KEEP];
-    static int sent_n;
+    static int sent_n, answered[IW_REQ_KEEP], answered_n;
     char u8[0x33 * 3 + 1], mine[64];
     int i, k;
     if (iw_lock()) {
@@ -756,6 +781,8 @@ static void iw_snapshot(BYTE *b, jw *w, const ig_copy *c)
         for (i = mail_inbox_next(g_iw.mid_from, 1 << 7); i >= 0; i = mail_inbox_next(g_mail[i].mid, 1 << 7))
             message_store_msg_json(b, &msgs, g_mail[i].hdr, g_mail[i].mid, "stored", -1, pc_mail_kind(g_mail[i].hdr) == 1 ? 0 : -1,
                                    g_mail[i].subj, g_mail[i].text, g_mail[i].has_att ? g_mail[i].att : NULL);
+        for (answered_n = i = 0; i < g_iw_req_n; i++)
+            if (g_iw_req[i].gone) answered[answered_n++] = g_iw_req[i].mid;
         for (sent_n = 0; sent_n < g_iw_sent_n; sent_n++)
             sent[sent_n] = g_iw_sent[(g_iw_sent_next + IW_SENT_KEEP - g_iw_sent_n + sent_n) % IW_SENT_KEEP];
         iw_unlock();
@@ -765,6 +792,9 @@ static void iw_snapshot(BYTE *b, jw *w, const ig_copy *c)
     jw_end(w);
     jw_arr(w, "gameSent");
     for (i = 0; i < sent_n; i++) iw_sent_json(b, w, c, &sent[i]);
+    jw_end(w);
+    jw_arr(w, "answeredInGame");
+    for (i = 0; i < answered_n; i++) jw_int(w, NULL, answered[i]);
     jw_end(w);
     jw_obj(w, "gameWrites");
     jw_bool(w, "send", iw_area(IW_AREA_SEND));

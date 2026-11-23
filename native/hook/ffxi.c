@@ -48,6 +48,7 @@ static void iw_answer_result(const char *token, const char *state);
 static void iw_send_result(const char *token, const char *state, const BYTE *msg);
 static int iw_arrived(const BYTE *hdr, const char *name, const char *body, int got);
 static void iw_game_sent(const BYTE *msg);
+static void iw_requests_seen(void);
 
 static const int g_fx_core[] = { AT_FX_COUNT_CALL, AT_FX_MARK_CALL, AT_FX_ADD_LINE, AT_FX_CHAT_LOG };
 
@@ -1516,6 +1517,7 @@ static void fx_scan(BYTE *b, int seeding)
     g_fx.find = NULL;
     FindClose(h);
     fx_seen_prune();
+    iw_requests_seen();
     fx_requests(b);
     if (seeding) base_log("ffxi: in the world, %d message(s) already in r\\b stay unread, new ones go to the chat log\r\n", n);
 }
