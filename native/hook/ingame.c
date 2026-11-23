@@ -31,6 +31,7 @@ static void iw_worker(BYTE *b);
 static int iw_quick(void);
 static void iw_snapshot(BYTE *b, jw *w, const ig_copy *c);
 static void iw_reset(void);
+static int iw_holding(void);
 
 static struct {
     BYTE *b;
@@ -147,6 +148,7 @@ static void ig_tick(void)
     /* one line each, the first time the game's thread gets here and the first time FFXI's session is up */
     if (!(g_ig.said & 1)) {
         g_ig.said |= 1;
+        g_log_thread = GetCurrentThreadId();
         base_log("ingame: the POLL callback is running on the game's thread\r\n");
         fx_polled();
     }
@@ -181,8 +183,8 @@ static void __cdecl ig_poll(int unused)
         ig_fault("game thread", 1);
     }
     iw_poll(g_ig.b);
-    /* with the friends list off it's only here for the chat's calls to go back and for the lobby */
-    if (g_ig.off && !fx_patched() && !lb_wanted()) ig_disarm();
+    /* with the friends list off it's only here for the chat's calls to go back, the lobby and my jobs to end */
+    if (g_ig.off && !fx_patched() && !lb_wanted() && !iw_holding()) ig_disarm();
 }
 
 /* 0 when the file didn't go in, the worker tries again soon */
@@ -200,12 +202,12 @@ static DWORD WINAPI ig_worker(void *unused)
     ULONGLONG flushed = 0;
     (void)unused;
     while (!g_ig.stop) {
+        base_log_drain();
         woke = fx_wait(g_ig.wake, !ok ? IG_RETRY_MS : iw_quick() ? IW_BEAT_MS : IG_BEAT_MS);
         if (g_ig.stop) break;
         if (!g_ig.off) {
             iw_worker(g_ig.b);
-            /* r\b changing on its own, or the quick beat for the app's requests, is no reason to write the friends out
-               again unless something changed or the beat's due */
+            /* only written out again when something changed or the beat's due */
             if (!woke || g_snap_dirty || !ok || GetTickCount64() - flushed >= IG_BEAT_MS) {
                 g_snap_dirty = 0;
                 flushed = GetTickCount64();
@@ -224,6 +226,8 @@ static DWORD WINAPI ig_worker(void *unused)
             break;
         }
     }
+    g_log_queue = 0;
+    base_log_drain();
     return 0;
 }
 
@@ -231,6 +235,8 @@ static void ingame_stop(void)
 {
     if (!InterlockedExchange(&g_ig.on, 0)) return;
     InterlockedExchange(&g_ig.stop, 1);
+    g_log_queue = 0;
+    base_log_drain();
     ig_disarm();
     if (g_ig.wake) SetEvent(g_ig.wake);
 }
@@ -286,6 +292,7 @@ static void ingame_start(BYTE *b)
         ig_read(b, &g_ig.shared);
         ig_flush();
         g_ig.thread = CreateThread(NULL, 0, ig_worker, NULL, 0, NULL);
+        g_log_queue = g_ig.thread != NULL;
         if (!g_ig.thread) {
             g_ig.code = GetLastError();
             ig_fault("start", 0);

@@ -1,5 +1,4 @@
-/* the app's sends, status changes and friend list changes whilst the game runs. The worker takes the request files and
-   hands them over, the game's thread does every polcore and FFXiMain call from the POLL callback */
+/* the app's writes in play: the worker takes the files, the game's thread makes every call */
 enum { IW_SEND, IW_STATUS, IW_FRIEND, IW_COMMENT, IW_ANSWER, IW_SEARCH, IW_BOXES };
 enum { IW_AREA_SEND, IW_AREA_STATUS, IW_AREA_EDITS };
 enum { IW_UP_NONE, IW_UP_ARMED, IW_UP_LATE };
@@ -110,8 +109,10 @@ static int iw_slots(BYTE *b)
 }
 static int iw_busy(void) { return g_iw.up != IW_UP_NONE || g_iw.comment_job >= 0 || g_search.step != 0; }
 static int iw_mine_idle(void) { return !iw_busy() && g_fx.job < 0 && !g_fx.msg; }
-/* the game's own friend request, accept and block find the upload taken and give up part way, so nothing starts beside
-   them. The lock bits are 2 for the handle list's upload and 4 for the friend list's */
+static int iw_holding(void) { return iw_busy() || g_fx.job >= 0 || g_fx.msg; }
+static int iw_send_held(void) { return g_iw.up == IW_UP_ARMED && g_iw.then == IW_THEN_REQUEST; }
+static int iw_answer_held(void) { return g_iw.up == IW_UP_ARMED && g_iw.then == IW_THEN_DECLINE; }
+/* the game's own friend jobs give up part way if they meet my upload. Lock bit 2 is the handle list's, 4 the friend list's */
 static int iw_game_idle(void)
 {
     BYTE *jobs = *(BYTE **)pc_addr_of(g_fx.base, AT_FX_FRIEND_JOBS), *list = *(BYTE **)pc_addr_of(g_fx.base, AT_FX_FRIEND_STATE);
@@ -220,6 +221,23 @@ static void iw_comment_step(BYTE *b)
 }
 
 /* polcore's own status, svc 0x338, moves once the game's two changes have gone */
+/* the records are read on the worker, the game's thread only starts and polls the jobs */
+static void iw_search_step(BYTE *b)
+{
+    int r;
+    if (!g_search.step || g_search.step == 5 || !iw_world(b)) return;
+    g_iw_step = "search";
+    if (g_search.step != 4) {
+        profiles_search_pump(b, 0);
+    } else if ((r = pc_pdb_search_fetch_check(b, g_search.job)) != 0) {
+        g_search.job = -1;
+        if (r < 0) profiles_search_done(requests_failed(r));
+        else g_search.step = 5;
+    }
+    g_iw_step = "";
+    if (!g_search.step || g_search.step == 5) iw_changed();
+}
+
 static void iw_status_step(BYTE *b)
 {
     if (g_iw.status_want < 0) return;
@@ -259,7 +277,7 @@ static int iw_send(BYTE *b, char *buf)
     fx_send *s;
     char *p = buf, *row_s, *tok, *who, *subj, *text, *q, frName[64];
     int row, n, wl;
-    if (g_fx.nsends >= FX_SENDS) return 0;
+    if (g_fx.nsends + iw_send_held() >= FX_SENDS) return 0;
     row_s = requests_line(&p); tok = requests_line(&p); who = requests_line(&p); subj = requests_line(&p);
     text = p;
     if (!requests_parse_num(row_s, 4, &row)) { iw_send_result(tok, "failed:bad request", NULL); return 1; }
@@ -387,8 +405,7 @@ static int iw_waiting(const BYTE *hdr, fx_request *out)
     return found;
 }
 
-/* a request from the hold's list, by its mid. Answers go through the game's own accept and decline, so its file moves to
-   r\a the way the game's menu would do it, and the menu can't answer it again */
+/* answers go through the game's own accept and decline, so the game's menu can't answer it again */
 static int iw_answer(BYTE *b, char *buf)
 {
     char *p = buf, *op, *tok, *mids, *subj, *arg, *hkey, k[17], nm[16];
@@ -521,12 +538,7 @@ static void iw_game(BYTE *b)
     int k;
     if (g_fx.found) iw_upload_step();
     iw_comment_step(b);
-    if (g_search.step) {
-        g_iw_step = "search";
-        profiles_search_pump(b, 0);
-        g_iw_step = "";
-        if (!g_search.step) iw_changed();
-    }
+    iw_search_step(b);
     iw_status_step(b);
     if (!g_fx.found && iw_base()) return;
     if (g_fx.found && !g_fx.off && !g_ig.off && !g_iw.dead) {
@@ -551,6 +563,7 @@ static void iw_poll(BYTE *b)
             /* a second fault means the wind-down's what faulted, so the jobs it was seeing through are let go */
             if (g_iw.dead || g_fx.off) {
                 g_iw.comment_job = -1;
+                g_iw.status_want = -1;
                 g_search.step = 0;
                 g_search.job = -1;
             }
@@ -562,7 +575,7 @@ static void iw_poll(BYTE *b)
     iw_unlock();
 }
 
-static void iw_worker(BYTE *b)
+static void iw_worker_take(BYTE *b, volatile LONG *held)
 {
     static const struct { const char *ext; int area; } rows[] = {
         { REQ_SEND, IW_AREA_SEND }, { REQ_STATUS, IW_AREA_STATUS }, { REQ_FRIEND, IW_AREA_EDITS }, { REQ_COMMENT, IW_AREA_EDITS },
@@ -579,6 +592,7 @@ static void iw_worker(BYTE *b)
                 base_log("ingame: a %s request was let go, the game's thread held on\r\n", rows[k].ext);
                 continue;
             }
+            *held = 1;
             if (!ok) {
                 base_log("ingame: a %s request was turned down, that can't be done in the game this time\r\n", rows[k].ext);
                 iw_refuse(k, buf, "failed:ingame");
@@ -587,11 +601,30 @@ static void iw_worker(BYTE *b)
                 if (!ok && g_search.step) iw_refuse(k, g_iw.box[k], "failed:busy");
                 iw_changed();
             }
+            *held = 0;
             iw_unlock();
             if (!ok) continue;
         }
         g_iw.wait_at[k] = GetTickCount64();
         InterlockedExchange(&g_iw.full[k], 1);
+    }
+}
+
+static void iw_worker(BYTE *b)
+{
+    volatile LONG held = 0;
+    __try {
+        iw_worker_take(b, &held);
+        if (g_search.step == 5 && iw_lock()) {
+            held = 1;
+            profiles_search_hits(b, &g_search);
+            iw_changed();
+            held = 0;
+            iw_unlock();
+        }
+    } __except (ig_filter(GetExceptionInformation())) {
+        if (held) iw_unlock();
+        ig_fault("worker", 0);
     }
 }
 
@@ -601,22 +634,24 @@ static void iw_snapshot(BYTE *b, jw *w, const ig_copy *c)
     static send_hist hist[SEND_HIST];
     static srchrec hits[SEARCH_MAX];
     static char stoken[48], sstate[32];
+    static int next, busy, n, kind, total, many;
     char u8[0x33 * 3 + 1], mine[64];
-    int i, k, next, busy, n, kind, total, many;
-    if (!iw_lock()) return;
-    send = g_iw.send;
-    edit = g_iw.edit;
-    memcpy(hist, g_iw.hist, sizeof hist);
-    next = g_iw.hist_next;
-    busy = g_iw.full[IW_STATUS] || g_iw.status_want >= 0;
-    lstrcpynA(stoken, g_s.search_token, sizeof stoken);
-    lstrcpynA(sstate, g_s.search_state, sizeof sstate);
-    n = g_search.step ? 0 : g_s.search_n;
-    kind = g_s.search_kind;
-    total = g_s.search_total;
-    many = g_s.search_many;
-    memcpy(hits, g_srch, (size_t)n * sizeof hits[0]);
-    iw_unlock();
+    int i, k;
+    if (iw_lock()) {
+        send = g_iw.send;
+        edit = g_iw.edit;
+        memcpy(hist, g_iw.hist, sizeof hist);
+        next = g_iw.hist_next;
+        busy = g_iw.full[IW_STATUS] || g_iw.status_want >= 0;
+        lstrcpynA(stoken, g_s.search_token, sizeof stoken);
+        lstrcpynA(sstate, g_s.search_state, sizeof sstate);
+        n = g_search.step ? 0 : g_s.search_n;
+        kind = g_s.search_kind;
+        total = g_s.search_total;
+        many = g_s.search_many;
+        memcpy(hits, g_srch, (size_t)n * sizeof hits[0]);
+        iw_unlock();
+    }
     jw_obj(w, "gameWrites");
     jw_bool(w, "send", iw_area(IW_AREA_SEND));
     jw_bool(w, "status", iw_area(IW_AREA_STATUS));

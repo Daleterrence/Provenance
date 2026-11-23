@@ -143,10 +143,41 @@ static void profiles_search_request(BYTE *b)
     g_s.db_last = GetTickCount64();
     if (profiles_search_parse(b, buf)) profiles_search_start(b, &g_search);
 }
+static void profiles_search_hits(BYTE *b, db_job *j)
+{
+    int guard = 0;
+    for (BYTE *rec = (BYTE *)j->rec; rec && g_s.search_n < SEARCH_MAX && guard++ < SEARCH_MAX * 2; rec = *(BYTE **)rec) {
+        pdb_item *ph, *it;
+        const pol_friend *fr;
+        srchrec *h = &g_srch[g_s.search_n];
+        if (!*(DWORD *)(rec + 0xc)) continue;
+        ph = profile_db_get(b, g_srch_pib, "z_phead", (pdb_rec *)rec);
+        if (!ph || !(ph->flags & 1) || !(fr = (const pol_friend *)ph->v.bytes.p) || IsBadReadPtr(fr, sizeof *fr)) continue;
+        if (!pc_friend_valid(fr)) continue;
+        memset(h, 0, sizeof *h);
+        h->lo = fr->id_lo;
+        h->hi = fr->id_hi;
+        h->slot = pc_friend_slot(fr);
+        memcpy(h->name, fr->name, 15);
+        if (g_s.search_kind == SK_CHARACTER) {
+            it = profile_db_get(b, g_srch_pib, "z_name", (pdb_rec *)rec);
+            if (it && (it->flags & 1) && it->v.str && !IsBadStringPtrA(it->v.str, 0x40))
+                json_sjis_copy(h->chname, it->v.str, sizeof h->chname);
+            it = profile_db_get(b, g_srch_pib, "z_worldname", (pdb_rec *)rec);
+            if (((pdb_rec *)rec)->level >= 1 && it && (it->flags & 1) && it->v.str && !IsBadStringPtrA(it->v.str, 0x40))
+                json_sjis_copy(h->world, it->v.str, sizeof h->world);
+        } else {
+            it = profile_db_get(b, g_srch_pib, "z_ficon", (pdb_rec *)rec);
+            h->pic = it && (it->flags & 1) ? it->v.u32 : 0;
+        }
+        g_s.search_n++;
+    }
+    profiles_search_done("done");
+}
 static void profiles_search_pump(BYTE *b, int ctl)
 {
     db_job *j = &g_search;
-    int r, guard = 0;
+    int r;
     if (j->step == 0) {
         if (ctl && !g_s.draining) profiles_search_request(b);
         return;
@@ -175,33 +206,7 @@ static void profiles_search_pump(BYTE *b, int ctl)
     if (db_job_pending(b, j, r, 0)) return;
     j->job = -1;
     if (r < 0) { profiles_search_done(requests_failed(r)); return; }
-    for (BYTE *rec = (BYTE *)j->rec; rec && g_s.search_n < SEARCH_MAX && guard++ < SEARCH_MAX * 2; rec = *(BYTE **)rec) {
-        pdb_item *ph, *it;
-        const pol_friend *fr;
-        srchrec *h = &g_srch[g_s.search_n];
-        if (!*(DWORD *)(rec + 0xc)) continue;
-        ph = profile_db_get(b, g_srch_pib, "z_phead", (pdb_rec *)rec);
-        if (!ph || !(ph->flags & 1) || !(fr = (const pol_friend *)ph->v.bytes.p) || IsBadReadPtr(fr, sizeof *fr)) continue;
-        if (!pc_friend_valid(fr)) continue;
-        memset(h, 0, sizeof *h);
-        h->lo = fr->id_lo;
-        h->hi = fr->id_hi;
-        h->slot = pc_friend_slot(fr);
-        memcpy(h->name, fr->name, 15);
-        if (g_s.search_kind == SK_CHARACTER) {
-            it = profile_db_get(b, g_srch_pib, "z_name", (pdb_rec *)rec);
-            if (it && (it->flags & 1) && it->v.str && !IsBadStringPtrA(it->v.str, 0x40))
-                json_sjis_copy(h->chname, it->v.str, sizeof h->chname);
-            it = profile_db_get(b, g_srch_pib, "z_worldname", (pdb_rec *)rec);
-            if (((pdb_rec *)rec)->level >= 1 && it && (it->flags & 1) && it->v.str && !IsBadStringPtrA(it->v.str, 0x40))
-                json_sjis_copy(h->world, it->v.str, sizeof h->world);
-        } else {
-            it = profile_db_get(b, g_srch_pib, "z_ficon", (pdb_rec *)rec);
-            h->pic = it && (it->flags & 1) ? it->v.u32 : 0;
-        }
-        g_s.search_n++;
-    }
-    profiles_search_done("done");
+    profiles_search_hits(b, j);
 }
 
 static void profiles_profile_done(const char *state);

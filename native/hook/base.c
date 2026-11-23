@@ -104,18 +104,16 @@ static int base_ipc_json_commit(ipc_json *f, int ok)
     return ok;
 }
 
-static void base_log(const char *fmt, ...)
+enum { LOG_LINE = 1100, LOG_RING = 64 };
+/* the game's thread does no file work, its lines wait here for the worker */
+static char g_log_ring[LOG_RING][LOG_LINE];
+static volatile LONG g_log_head, g_log_tail, g_log_lost, g_log_queue;
+static volatile DWORD g_log_thread;
+
+static void base_log_write(const char *buf)
 {
-    char buf[1100], path[MAX_PATH + 64];
-    SYSTEMTIME st;
-    va_list ap;
+    char path[MAX_PATH + 64];
     DWORD n;
-    if (g_lgcs_ready) EnterCriticalSection(&g_lgcs);
-    GetLocalTime(&st);
-    wsprintfA(buf, "[%02u:%02u:%02u.%03u] ", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
-    va_start(ap, fmt);
-    wvsprintfA(buf + lstrlenA(buf), fmt, ap);
-    va_end(ap);
     base_ipc_file(path, IPC_LOG);
     HANDLE h = CreateFileA(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                            NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -123,6 +121,49 @@ static void base_log(const char *fmt, ...)
         WriteFile(h, buf, lstrlenA(buf), &n, NULL);
         CloseHandle(h);
     }
+}
+
+static void base_log_drain(void)
+{
+    static volatile LONG draining;
+    char buf[LOG_LINE];
+    LONG lost;
+    /* never the game's thread, so waiting on another drain is fine */
+    while (InterlockedCompareExchange(&draining, 1, 0)) Sleep(0);
+    if (g_lgcs_ready) EnterCriticalSection(&g_lgcs);
+    while (g_log_tail - g_log_head > 0) {
+        base_log_write(g_log_ring[g_log_head % LOG_RING]);
+        InterlockedIncrement(&g_log_head);
+    }
+    if ((lost = InterlockedExchange(&g_log_lost, 0)) != 0) {
+        wsprintfA(buf, "%ld log line(s) from the game's thread were dropped, the queue was full\r\n", lost);
+        base_log_write(buf);
+    }
+    if (g_lgcs_ready) LeaveCriticalSection(&g_lgcs);
+    InterlockedExchange(&draining, 0);
+}
+
+static void base_log(const char *fmt, ...)
+{
+    char buf[LOG_LINE];
+    SYSTEMTIME st;
+    va_list ap;
+    GetLocalTime(&st);
+    wsprintfA(buf, "[%02u:%02u:%02u.%03u] ", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+    va_start(ap, fmt);
+    wvsprintfA(buf + lstrlenA(buf), fmt, ap);
+    va_end(ap);
+    if (g_log_queue && GetCurrentThreadId() == g_log_thread) {
+        if (g_log_tail - g_log_head >= LOG_RING) {
+            InterlockedIncrement(&g_log_lost);
+            return;
+        }
+        lstrcpyA(g_log_ring[g_log_tail % LOG_RING], buf);
+        InterlockedIncrement(&g_log_tail);
+        return;
+    }
+    if (g_lgcs_ready) EnterCriticalSection(&g_lgcs);
+    base_log_write(buf);
     if (g_lgcs_ready) LeaveCriticalSection(&g_lgcs);
 }
 

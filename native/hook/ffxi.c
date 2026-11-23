@@ -41,6 +41,9 @@ typedef struct { DWORD time, seq; BYTE from_slot; } fx_sent_id;
 
 static int iw_answer_ready(BYTE *b);
 static int iw_busy(void);
+static int iw_world(BYTE *b);
+static int iw_send_held(void);
+static int iw_answer_held(void);
 static void iw_answer_result(const char *token, const char *state);
 static void iw_send_result(const char *token, const char *state, const BYTE *msg);
 
@@ -96,7 +99,7 @@ static struct {
     void *volatile copies[FX_COPIES];
     fx_request waiting[FX_WAITING], want;
     volatile LONG waiting_lock, ans_state, ans_done, ans_code;
-    int want_yes, cur_kind;
+    int want_yes, cur_kind, ans_app;
     ULONGLONG ans_at, want_at;
     char ans_token[48], cur_token[48];
 } g_fx;
@@ -563,6 +566,7 @@ static void fx_answer_want(const fx_request *r, int yes, const char *token)
     g_fx.want_yes = yes;
     g_fx.want_at = GetTickCount64();
     lstrcpynA(g_fx.ans_token, token, sizeof g_fx.ans_token);
+    g_fx.ans_app = token[0] != 0;
     g_fx.ans_state = FX_ANS_WANTED;
 }
 
@@ -583,7 +587,7 @@ static void fx_answer_say(const char *colour, const char *text)
 static void fx_answer_fail(const char *state)
 {
     if (g_fx.ans_token[0]) iw_answer_result(g_fx.ans_token, state);
-    else fx_answer_say(g_fx_red, g_fx_not_answered);
+    else if (!g_fx.ans_app) fx_answer_say(g_fx_red, g_fx_not_answered);
 }
 static void fx_answer_end(void)
 {
@@ -602,7 +606,7 @@ static void fx_answer_command(const char *who, const char *word)
         fx_print(FX_ICON_NONE, g_fx_red, g_fx_no_request, "", "");
         return;
     }
-    if (g_fx.ans_state != FX_ANS_NONE) {
+    if (g_fx.ans_state != FX_ANS_NONE || iw_answer_held()) {
         fx_print(FX_ICON_NONE, g_fx_red, g_fx_not_answered, "", "");
         base_log("ffxi: a friend request answer didn't go, another is still waiting for its reply\r\n");
         return;
@@ -646,7 +650,7 @@ static void fx_answer_went(const char *how)
     base_log("ffxi: a friend request was %s%s%s\r\n", g_fx.want_yes ? "accepted" : "declined", how,
              g_fx.ans_token[0] ? " (from Provenance)" : "");
     if (g_fx.ans_token[0]) iw_answer_result(g_fx.ans_token, "sent");
-    else fx_answer_say(g_fx_note, g_fx.want_yes ? "You accepted the friend request." : "You declined the friend request.");
+    else if (!g_fx.ans_app) fx_answer_say(g_fx_note, g_fx.want_yes ? "You accepted the friend request." : "You declined the friend request.");
 }
 
 /* the callback only leaves its code, the lines are printed from here */
@@ -698,7 +702,7 @@ static void fx_answer_pump(BYTE *b)
         }
         base_log("ffxi: a friend request answer got no reply in 30s\r\n");
         fx_answer_fail("failed:no reply");
-        if (g_fx.off) g_fx.ans_token[0] = 0;
+        g_fx.ans_token[0] = 0;
     }
 }
 
@@ -714,7 +718,7 @@ static void fx_command(BYTE *b)
         if (fx_answers()) fx_answer_command(who, raw);
         return;
     }
-    if (g_fx.nsends >= FX_SENDS) {
+    if (g_fx.nsends + iw_send_held() >= FX_SENDS) {
         fx_print(FX_ICON_NONE, g_fx_red, g_fx_not_sent, "", "");
         base_log("ffxi: a %s didn't go, four are already waiting\r\n", kind == FX_CMD_M ? "/m" : "/rm");
         return;
@@ -794,7 +798,7 @@ static void fx_send_done(int ok, const char *why)
             g_fx.msg = NULL;
             SetEvent(g_ig.wake);
         }
-    if (ok && g_fx.msg && !g_fx.cur_kind) base_log("ffxi: no room for a sent message's s\a copy, it isn't kept\r\n");
+    if (ok && g_fx.msg && !g_fx.cur_kind) base_log("ffxi: no room for a sent message's s\\a copy, it isn't kept\r\n");
     if (g_fx.msg) HeapFree(GetProcessHeap(), 0, g_fx.msg);
     g_fx.msg = NULL;
     g_fx.job = -1;
@@ -838,7 +842,7 @@ static void fx_send_pump(BYTE *b)
         if (g_fx.cur_token[0]) iw_send_result(g_fx.cur_token, "sending", NULL);
     }
     if (pc_has(b, SV_JOB_SLOTS)) pc_job_slots(b, &used, &total);
-    if (total - used < 3 || iw_busy()) return;
+    if (total - used < 3 || iw_busy() || !iw_world(b)) return;
     g_fx.sent_at = now;
     r = pc_mail_send(b, g_fx.msg);
     if (r == NO_SLOT) return;
