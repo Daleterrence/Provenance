@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Provenance.Common.Hook;
 using Provenance.Common.Social;
+using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Shared;
 
 namespace Provenance.Wpf.ViewModels.Social;
@@ -16,7 +17,7 @@ public sealed partial class FriendProfileViewModel : ObservableObject
 
     public event Action<string>? Popup;
 
-    public sealed record RowItem(string Label, string Value, ImageSource? Picture);
+    public sealed record RowItem(string Label, string Value, ImageSource? Picture, ImageSource? Emblem = null);
 
     public ObservableCollection<RowItem> Rows { get; } = new();
     public ObservableCollection<ProfileTab> Tabs { get; } = new();
@@ -321,8 +322,8 @@ public sealed partial class FriendProfileViewModel : ObservableObject
             return;
         }
         Name = r.NameState == ProfileFieldState.Private ? StateText(ProfileFieldState.Private) : _social.Viewer.Filtered(r.Name);
-        foreach (var (label, value) in FfxiProfileText.Rows(r, StateText(ProfileFieldState.Private), StateText(ProfileFieldState.NotSet), _social.Viewer.Filtered))
-            Rows.Add(new RowItem(label, value, null));
+        foreach (var (label, value, emblem) in FfxiProfileText.Rows(r, StateText(ProfileFieldState.Private), StateText(ProfileFieldState.NotSet), _social.Viewer.Filtered))
+            Rows.Add(new RowItem(label, value, null, NationEmblems.Image(emblem)));
     }
 
     private void ShowProfile(PolProfile p)

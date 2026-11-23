@@ -10,21 +10,28 @@ public sealed record ProfilePictureAsset(BitmapSource Image, ProfilePictureAsset
 public static class ProfilePictureAssets
 {
     private const string Root = "pack://application:,,,/Provenance;component/Assets/profile-pictures/";
-    private static readonly Lazy<Dictionary<int, ProfilePictureAssetMeta>> Meta = new(() =>
+    private static Dictionary<int, ProfilePictureAssetMeta>? _meta;
+
+    // reading a pack address before the app exists fixes WPF's resource assembly, so nothing's read until there is one
+    private static Dictionary<int, ProfilePictureAssetMeta> Meta()
     {
+        if (_meta is not null) return _meta;
+#pragma warning disable RS0030
+        if (System.Windows.Application.Current is null) return [];
+#pragma warning restore RS0030
         try
         {
             var info = System.Windows.Application.GetResourceStream(new Uri(Root + "pictures.json"));
-            if (info is null) return [];
+            if (info is null) return _meta = [];
             using var reader = new StreamReader(info.Stream);
-            return ProfilePictureAssetMeta.Parse(reader.ReadToEnd());
+            return _meta = ProfilePictureAssetMeta.Parse(reader.ReadToEnd());
         }
-        catch { return []; }
-    });
+        catch { return _meta = []; }
+    }
 
     public static ProfilePictureAsset? Find(int picId)
     {
-        if (!Meta.Value.TryGetValue(picId, out var meta)) return null;
+        if (!Meta().TryGetValue(picId, out var meta)) return null;
         try
         {
             var image = new BitmapImage(new Uri($"{Root}{picId}.png"));

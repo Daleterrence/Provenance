@@ -3,6 +3,7 @@ namespace Provenance.Common.Social;
 public static class FfxiNames
 {
     private static readonly string[] Nations = ["San d'Oria", "Bastok", "Windurst"];
+    private static readonly string[] NationEmblems = ["sandoria", "bastok", "windurst"];
 
     private static readonly string[] Jobs =
     [
@@ -104,6 +105,8 @@ public static class FfxiNames
     };
 
     public static string? Nation(int id) => id is >= 0 and <= 2 ? Nations[id] : null;
+
+    public static string? NationEmblem(int id) => id is >= 0 and <= 2 ? NationEmblems[id] : null;
     public static string? Job(int id) => id is >= 1 and <= 22 ? Jobs[id - 1] : null;
     public static string? Race(int id) => id is >= 1 and <= 8 ? Races[id - 1] : null;
     public static string? Area(int id) => Areas.TryGetValue(id, out var a) ? a : null;

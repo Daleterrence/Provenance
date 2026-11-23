@@ -29,6 +29,7 @@
     <Resource Include="$(ProvenanceAssetsDir)\app\no-image.jpg" Link="Assets\no-image.jpg" />
     <Resource Include="$(ProvenanceAssetsDir)\app\icons\*.svg" Link="Assets\icons\%(Filename)%(Extension)" />
     <Resource Include="$(ProvenanceAssetsDir)\app\themes\*.png" Link="Assets\themes\%(Filename)%(Extension)" />
+    <Resource Include="$(ProvenanceAssetsDir)\app\nation-emblems\*.png" Link="Assets\nation-emblems\%(Filename)%(Extension)" />
     <Resource Include="$(ProvenanceAssetsDir)\app\profile-pictures\*.png" Link="Assets\profile-pictures\%(Filename)%(Extension)" />
     <Resource Include="$(ProvenanceAssetsDir)\app\profile-pictures\*.json" Link="Assets\profile-pictures\%(Filename)%(Extension)" />
     <None Include="$(ProvenanceAssetsDir)\installer\zones\*.jpg" Link="zones\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

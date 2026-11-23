@@ -4,7 +4,7 @@ public static class FfxiProfileText
 {
     public const string Title = "FINAL FANTASY XI";
 
-    public static IReadOnlyList<(string Label, string Value)> Rows(PolFfxiProfile p, string privateText, string notSet,
+    public static IReadOnlyList<(string Label, string Value, string? Emblem)> Rows(PolFfxiProfile p, string privateText, string notSet,
                                                                     Func<string, string> filter)
     {
         string Of((int Value, ProfileFieldState State) v, Func<int, string?> name) =>
@@ -14,12 +14,12 @@ public static class FfxiProfileText
                      : p.WorldNameState == ProfileFieldState.Shown && p.WorldName.Length > 0 ? filter(p.WorldName) : notSet;
         return
         [
-            ("World Name", world),
-            ("Nation", Of(p.Nation, FfxiNames.Nation)),
-            ("Current Area", Of(p.Area, FfxiNames.Area)),
-            ("Job", Of(p.Job, FfxiNames.Job)),
-            ("Job Level", Of(p.JobLevel, l => l > 0 ? l.ToString() : null)),
-            ("Race", Of(p.Race, FfxiNames.Race)),
+            ("World Name", world, null),
+            ("Nation", Of(p.Nation, FfxiNames.Nation), p.Nation.State == ProfileFieldState.Shown ? FfxiNames.NationEmblem(p.Nation.Value) : null),
+            ("Current Area", Of(p.Area, FfxiNames.Area), null),
+            ("Job", Of(p.Job, FfxiNames.Job), null),
+            ("Job Level", Of(p.JobLevel, l => l > 0 ? l.ToString() : null), null),
+            ("Race", Of(p.Race, FfxiNames.Race), null),
         ];
     }
 }
