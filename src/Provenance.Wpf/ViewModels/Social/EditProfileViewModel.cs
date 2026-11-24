@@ -146,8 +146,8 @@ public sealed partial class EditProfileViewModel : ObservableObject, IDisposable
     private void ShowRows(ProfileCard card, PolFfxiProfile r)
     {
         card.Rows.Clear();
-        foreach (var (label, value, _) in FfxiProfileText.Rows(r, _social.Viewer.Text(0x4a73, "Private"), NotSet, _social.Viewer.Filtered))
-            card.Rows.Add(new FriendProfileViewModel.RowItem(label, value, null));
+        foreach (var (label, value, emblem) in FfxiProfileText.Rows(r, _social.Viewer.Text(0x4a73, "Private"), NotSet, _social.Viewer.Filtered))
+            card.Rows.Add(new FriendProfileViewModel.RowItem(label, value, null, NationEmblems.Image(emblem)));
     }
 
     private void OnCardSnapshot(PolSocialSnapshot snap)
