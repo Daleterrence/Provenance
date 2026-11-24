@@ -637,8 +637,8 @@ static void iw_worker_take(BYTE *b, volatile LONG *held)
 }
 
 /* what the game files in r\b during play, read only, handed to the app as a stored message it can answer by mid */
-/* 0 while its file's still being written, so it's looked at again */
-static int iw_arrived(const BYTE *hdr, const char *name, const char *body, int got)
+/* 0 while its file's still being written, so it's looked at again. shown: the game's chat log got a line for it */
+static int iw_arrived(const BYTE *hdr, const char *name, const char *body, int got, int shown)
 {
     static char buf[STORE_BODY_MAX];
     static mailrec probe;
@@ -671,6 +671,7 @@ static int iw_arrived(const BYTE *hdr, const char *name, const char *body, int g
         m->has_att = probe.has_att;
         m->state = 7;
         m->stored = 1;
+        m->shown = shown;
         m->shome = g_home;
         lstrcpynA(m->sname, name, sizeof m->sname);
         iw_changed();
@@ -781,7 +782,7 @@ static void iw_snapshot(BYTE *b, jw *w, const ig_copy *c)
         memset(&msgs, 0, sizeof msgs);
         for (i = mail_inbox_next(g_iw.mid_from, 1 << 7); i >= 0; i = mail_inbox_next(g_mail[i].mid, 1 << 7))
             message_store_msg_json(b, &msgs, g_mail[i].hdr, g_mail[i].mid, "stored", -1, pc_mail_kind(g_mail[i].hdr) == 1 ? 0 : -1,
-                                   g_mail[i].subj, g_mail[i].text, g_mail[i].has_att ? g_mail[i].att : NULL);
+                                   g_mail[i].subj, g_mail[i].text, g_mail[i].has_att ? g_mail[i].att : NULL, g_mail[i].shown);
         for (answered_n = i = 0; i < g_iw_req_n; i++)
             if (g_iw_req[i].gone) answered[answered_n++] = g_iw_req[i].mid;
         for (sent_n = 0; sent_n < g_iw_sent_n; sent_n++)

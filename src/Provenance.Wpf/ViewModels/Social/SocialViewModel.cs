@@ -792,7 +792,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         var open = Conversations.Where(c => c.ConversationVisible && c.Friend != null).Select(c => (c.Friend!.Name, c.Friend.Key)).ToList();
         var r = _login.Sync.Merge(chat, snap, _pol.Pid, SendBlockedNote is not null, open, NoticeText, _viewer.Filtered);
         if (r.SendsChanged) RefreshConversations();
-        foreach (var n in r.News)
+        // the game's chat log has already shown those, so there's nothing to notice or flash for
+        foreach (var n in r.News.Where(n => !n.InGame))
             switch (n.Kind)
             {
                 case ChatNewsKind.Notice: NoticeReceived?.Invoke(n.From, n.Text); break;

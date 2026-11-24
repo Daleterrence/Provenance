@@ -18,6 +18,7 @@ public sealed record PolMessage(string From, int FromSlot, int Kind, long Time, 
     public bool Read { get; init; }
     public bool Ignored { get; init; }
     public string Group { get; init; } = "";
+    public bool ShownInGame { get; init; }
 
     public const int KindFriendRequest = 1, KindFriendAccepted = 9, KindFriendDeclined = 10;
 

@@ -94,6 +94,7 @@ public static class SocialSnapshotFiles
             Str(m, "subject"), Str(m, "text"), (int)Long(m, "mid"), Str(m, "fromKey"))
         {
             IsMe = Bool(m, "me"), ToKey = Str(m, "toKey"), ToMe = Bool(m, "toMe"), Read = Bool(m, "read"), Ignored = Bool(m, "ignored"), Group = Str(m, "group"),
+            ShownInGame = Bool(m, "shownInGame"),
         };
 
     private static PolProfile ReadProfile(JsonElement p) =>

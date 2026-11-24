@@ -12,7 +12,7 @@ typedef struct {
     BYTE att[0x20];
     int has_att;
     int stored, shome, has_twin, twin_deleted, del_tries, del_lost, moved, move_fails;
-    int filed, srv_gone, del_failed, read_want, del_early;
+    int filed, srv_gone, del_failed, read_want, del_early, shown;
     ULONGLONG del_at, move_at;
     char sname[100];
 } mailrec;

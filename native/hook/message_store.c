@@ -1,5 +1,5 @@
 static void message_store_msg_json(BYTE *b, jw *w, const BYTE *e, int mid, const char *state, int read, int ignored,
-                    const char *subj, const char *text, const BYTE *att)
+                    const char *subj, const char *text, const BYTE *att, int shown)
 {
     char sk[17], tk[17];
     WORD f = MAIL(e)->flags;
@@ -22,6 +22,7 @@ static void message_store_msg_json(BYTE *b, jw *w, const BYTE *e, int mid, const
     jw_lit(w, "state", state);
     if (read >= 0) jw_bool(w, "read", read);
     if (ignored >= 0) jw_bool(w, "ignored", ignored);
+    if (shown) jw_bool(w, "shownInGame", 1);
     /* removed from a group (0x12) or it was disbanded (0x13): the name's in the type-10 attachment, the text's empty */
     if (att && (kind == 0x12 || kind == 0x13)) jw_sjis(w, "group", b, att + 8, 0x14, 71);
     jw_text(w, "subject", subj);
@@ -807,7 +808,7 @@ static void message_store_import(BYTE *b)
         if (sent) message_store_sent_json(b, &one, all[i].hdr, 0, all[i].sub == 2 ? "sent" : "unsent",
                                   scratch.subj, scratch.text);
         else message_store_msg_json(b, &one, all[i].hdr, mid, "local", all[i].read, -1,
-                            scratch.subj, scratch.text, scratch.has_att ? scratch.att : NULL);
+                            scratch.subj, scratch.text, scratch.has_att ? scratch.att : NULL, 0);
         if (one.fail) { jw_free(&one); continue; }
         if (in.n + out.n + one.n + 2 > STORE_JSON_MAX || (jw_splice(dst, one.p, one.n), dst->fail)) {
             left = n - i;

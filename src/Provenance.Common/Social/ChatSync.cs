@@ -4,7 +4,7 @@ namespace Provenance.Common.Social;
 
 public enum ChatNewsKind { Message, Notice, FriendRequest, GroupInvite }
 
-public sealed record ChatNews(ChatNewsKind Kind, string From, string Text = "", int Mid = 0);
+public sealed record ChatNews(ChatNewsKind Kind, string From, string Text = "", int Mid = 0, bool InGame = false);
 
 public sealed record ChatSyncResult(bool Changed, bool SendsChanged, IReadOnlyList<int> ToAck, IReadOnlyList<ChatNews> News);
 
@@ -78,7 +78,7 @@ public sealed class ChatSync(MailSendQueue sends)
                 {
                     changed = true;
                     news.Add(new(ChatNewsKind.Notice, who,
-                        SaysWho(m.Kind) ? $"{who} {char.ToLowerInvariant(line[0])}{line[1..]}" : line));
+                        SaysWho(m.Kind) ? $"{who} {char.ToLowerInvariant(line[0])}{line[1..]}" : line, InGame: m.ShownInGame));
                 }
                 if (m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
                 continue;
@@ -91,7 +91,7 @@ public sealed class ChatSync(MailSendQueue sends)
             if (m.HasBody && m.Kind == PolMessage.KindFriendRequest && m.Mid > 0 && _seenRequests.Add(m.Mid))
             {
                 Log.Information("A friend request showed up (from the {Source})", m.IsStored ? "store" : "server");
-                news.Add(new(ChatNewsKind.FriendRequest, m.From, Mid: m.Mid));
+                news.Add(new(ChatNewsKind.FriendRequest, m.From, Mid: m.Mid, InGame: m.ShownInGame));
             }
             // chat from someone I ignore gets binned unread. The hook only catches listed mail, not a push
             if (m.IsChat && m.FromKey.Length > 0 && snap.Blocked.Any(x => x.Key == m.FromKey))
@@ -109,7 +109,7 @@ public sealed class ChatSync(MailSendQueue sends)
             if (chat.MergeIncoming(m))
             {
                 changed = true;
-                news.Add(new(ChatNewsKind.Message, who, filtered(m.Text.Length > 0 ? m.Text : m.Subject)));
+                news.Add(new(ChatNewsKind.Message, who, filtered(m.Text.Length > 0 ? m.Text : m.Subject), InGame: m.ShownInGame));
             }
             if (m.HasBody && m.IsChat && m.Mid > 0 && _acked.Add(m.Mid)) saved.Add(m.Mid);
         }

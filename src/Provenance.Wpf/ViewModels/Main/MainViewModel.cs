@@ -370,7 +370,6 @@ public partial class MainViewModel : ObservableObject
 
     private void Alert(NoticeKind kind, string? sender, string text, string icon = "mail", bool stays = false, int request = 0)
     {
-        if (GameOpen) return;
         bool notice = _settings.Current.Shows(kind), flash = _settings.Current.Flashes(kind);
         if (notice) Notice.Show(text, icon, sender is null ? NoticeTarget.Friends : NoticeTarget.Chat, sender, request, stays);
         if (notice || flash) RequestAttention?.Invoke(notice, flash);

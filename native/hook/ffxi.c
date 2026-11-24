@@ -46,7 +46,7 @@ static int iw_send_held(void);
 static int iw_answer_held(void);
 static void iw_answer_result(const char *token, const char *state);
 static void iw_send_result(const char *token, const char *state, const BYTE *msg);
-static int iw_arrived(const BYTE *hdr, const char *name, const char *body, int got);
+static int iw_arrived(const BYTE *hdr, const char *name, const char *body, int got, int shown);
 static void iw_game_sent(const BYTE *msg);
 static void iw_requests_seen(void);
 
@@ -1446,7 +1446,7 @@ static int fx_take(const char *name, const BYTE *hdr)
     /* a bounce can be addressed to the friend it was for, so this goes before the owned check */
     if (kind == 0 && !pc_mail_receipt(hdr) && fx_bounced(hdr)) return fx_queue(FX_BOUNCE, "", "", NULL, NULL, 0) ? 1 : 2;
     if (!message_store_owned(hdr, 1, g_ig.written.me) || pc_mail_receipt(hdr) || fx_ignored(hdr)) return 1;
-    if (kind != 0 && !iw_arrived(hdr, name, NULL, 0)) return 0;
+    if (kind != 0 && !iw_arrived(hdr, name, NULL, 0, kind == 1 || kind == 9)) return 0;
     /* a friend request, or the news that one was accepted, stays in r\b and just gets a line. Anything about groups gets none */
     if (kind == 1 || kind == 9) {
         fx_sender(hdr, who);
@@ -1480,7 +1480,7 @@ static int fx_take(const char *name, const BYTE *hdr)
     f.alt_home = -1;
     got = message_store_body(&f, body, sizeof body);
     if (got < (int)MAIL(hdr)->len) return 0;
-    iw_arrived(hdr, name, body, got);
+    iw_arrived(hdr, name, body, got, 1);
     for (start = 0; start < got && body[start] != 0x07; start++) {}
     start = start < got ? start + 1 : 0;
     for (end = start; end < got && body[end]; end++) {}
@@ -1524,7 +1524,7 @@ static void fx_scan(BYTE *b, int seeding)
             /* already there before the player first got in the world, or it came at the character select: it stays unread */
             } else if (seeding || g_fx.at_select) {
                 if (fx_seen_add(fd.cFileName, hdr, 1) >= 0) n++;
-                iw_arrived(hdr, fd.cFileName, NULL, 0);
+                iw_arrived(hdr, fd.cFileName, NULL, 0, 0);
                 continue;
             } else if ((k = fx_seen_add(fd.cFileName, hdr, 0)) < 0) {
                 continue;

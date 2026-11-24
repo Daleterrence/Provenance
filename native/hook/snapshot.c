@@ -287,7 +287,7 @@ static void snapshot_social(BYTE *b)
                                                      : ml->state == 1 ? "read" : "pending",
                       -1,   /* no read bit, a server copy hasn't got one */
                       (pc_mail_kind(ml->hdr) == 1 || pc_mail_kind(ml->hdr) == 0xe) ? mail_inbox_sender_ignored(b, ml->hdr) : -1,
-                      hold ? "" : ml->subj, hold ? "" : ml->text, ml->has_att && !hold ? ml->att : NULL);
+                      hold ? "" : ml->subj, hold ? "" : ml->text, ml->has_att && !hold ? ml->att : NULL, 0);
     }
     jw_end(&w);
     jw_end(&w);
