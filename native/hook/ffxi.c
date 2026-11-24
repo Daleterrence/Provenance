@@ -752,7 +752,7 @@ static void fx_command(BYTE *b)
     }
     g_fx.nsends++;
     wsprintfA(name, "[%s%s%s%s] ", fx_is_away(pc_friend_row(b, 0), s->lo, s->hi, s->slot) ? fx_icon(FX_ICON_AWAY) : "", g_fx_name, s->name, g_fx_blue);
-    fx_print(FX_ICON_POL, g_fx_blue, "To ", name, s->text);
+    fx_print(FX_ICON_POL, g_fx_blue, "To", name, s->text);
 }
 
 /* the game's own commands always win, this only sees one it didn't know */
