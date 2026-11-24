@@ -15,6 +15,8 @@ using Provenance.Common.Social;
 using Provenance.Wpf.Controls.Behaviours;
 using Provenance.Wpf.Win32;
 using Serilog;
+using Velopack;
+using Velopack.Locators;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.Views.Main;
 using Provenance.Wpf.ViewModels.Main;
@@ -153,9 +155,10 @@ public partial class App : Application
     {
         try
         {
-            var region = settings.DetectedRegion ?? FeedService.Resolve(settings.Current.FeedRegion, null);
-            Log.Information("{Line:l}", StartupLine.For(VersionTag.OwnText() ?? "dev", Environment.OSVersion.Version,
-                settings.Current.ThirdPartyHookPlatform, region));
+            string version = (VelopackLocator.IsCurrentSet ? VelopackLocator.Current.CurrentlyInstalledVersion?.ToString() : null)
+                             ?? VersionTag.OwnText() ?? "dev";
+            Log.Information("{Line:l}", StartupLine.For(version, Environment.OSVersion.Version,
+                settings.Current.ThirdPartyHookPlatform, settings.DetectedRegion));
         }
         catch (Exception ex) { Log.Warning(ex, "Couldn't log what Provenance is running on"); }
     }
