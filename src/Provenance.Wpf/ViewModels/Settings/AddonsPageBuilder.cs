@@ -5,6 +5,7 @@ using Provenance.Common.Game.Ashita;
 using Provenance.Common.Game.ThirdParty;
 using Provenance.Common.Game.Windower;
 using Provenance.Common.Hook;
+using Provenance.Common.Login;
 using Provenance.Common.Security;
 using Provenance.Wpf.Services;
 using Serilog;
@@ -34,20 +35,21 @@ internal static class AddonsPageBuilder
         return new AshitaScan(AshitaAddons.Scan(dir, docs), AshitaPlugins.Scan(dir, docs));
     }
 
-    internal static AddonsPage Build(AddonsTarget target, IReadOnlyDictionary<string, WindowerAddonList> lists, WindowerAddonList? extras, AddonsScan? scan) => target switch
+    internal static AddonsPage Build(AddonsTarget target, IReadOnlyDictionary<string, WindowerAddonList> lists, WindowerAddonList? extras, AddonsScan? scan,
+                                     AutoLoginReach reach) => target switch
     {
         { Platform: ThirdPartyHook.Windower, Folder: null } =>
             AddonsPage.Empty("Provenance couldn't find Windower. Choose its folder under Windower/Ashita first."),
         { Platform: ThirdPartyHook.Windower, Folder: { } dir } when FolderPins.Linked(dir) => AddonsPage.Empty(WindowerInstall.LinkedText),
-        { Platform: ThirdPartyHook.Windower, Folder: { } dir } => BuildWindower(dir, target.Profile, lists, extras, scan as WindowerScan),
+        { Platform: ThirdPartyHook.Windower, Folder: { } dir } => BuildWindower(dir, target.Profile, lists, extras, scan as WindowerScan, reach),
         { Platform: ThirdPartyHook.Ashita, Folder: null } =>
             AddonsPage.Empty("Provenance couldn't find Ashita. Choose its folder under Windower/Ashita first."),
-        { Platform: ThirdPartyHook.Ashita, Folder: { } dir } => BuildAshita(dir, target.Profile, scan as AshitaScan),
+        { Platform: ThirdPartyHook.Ashita, Folder: { } dir } => BuildAshita(dir, target.Profile, scan as AshitaScan, reach),
         _ => AddonsPage.Empty("Choose Windower or Ashita and its folder under Windower/Ashita first."),
     };
 
     private static AddonsPage BuildWindower(string dir, string profileName, IReadOnlyDictionary<string, WindowerAddonList> lists, WindowerAddonList? extras,
-                                      WindowerScan? scan)
+                                      WindowerScan? scan, AutoLoginReach reach)
     {
         scan ??= (WindowerScan)Scan(new AddonsTarget(ThirdPartyHook.Windower, dir, profileName))!;
         var page = new AddonsPage { Platform = ThirdPartyHook.Windower };
@@ -107,6 +109,7 @@ internal static class AddonsPageBuilder
                 badges.Add(problem);
                 canTurnOn = false;
             }
+            bool replaced = kind == AddonKind.Addon && Replaced(key, AutoLogin.WindowerAddon, reach, badges);
             var loaded = kind == AddonKind.Addon ? loadedAddons : loadedPlugins;
             AddonGroup? group = null;
             if (loaded.TryGetValue(key, out var why) && why.StartsWith(LoadedBy, StringComparison.Ordinal))
@@ -116,8 +119,8 @@ internal static class AddonsPageBuilder
             }
             return new RowData(kind, listing)
             {
-                On = on, HasSwitch = hasSwitch, CanChange = !frozen && (canTurnOn || on), CanInstall = !isInstalled && installable, Badges = badges,
-                Group = group, Team = official ? "Windower" : null,
+                On = on && !replaced, HasSwitch = hasSwitch, CanChange = !frozen && !replaced && (canTurnOn || on), CanInstall = !isInstalled && installable,
+                Badges = badges, Group = group, Team = official ? "Windower" : null, ReplacedByAutoLogin = replaced,
             };
         }
 
@@ -159,7 +162,7 @@ internal static class AddonsPageBuilder
         return reasons;
     }
 
-    private static AddonsPage BuildAshita(string dir, string bootName, AshitaScan? scan)
+    private static AddonsPage BuildAshita(string dir, string bootName, AshitaScan? scan, AutoLoginReach reach)
     {
         if (string.IsNullOrWhiteSpace(bootName)) return AddonsPage.Empty("Choose a boot configuration under Windower/Ashita first.");
         var path = AddonSwitches.BootPath(dir, bootName);
@@ -203,11 +206,12 @@ internal static class AddonsPageBuilder
             if (!installed) badges.Add(Badges.NotInAshita);
             if (problem is not null) badges.Add(problem);
             else if (installed && !AddonSwitches.Loadable(kind, key)) badges.Add(problem = Badges.BadName);
+            bool replaced = kind == AddonKind.Addon && Replaced(key, AutoLogin.AshitaAddon, reach, badges);
             bool on = state == AshitaLoad.On, canTurnOn = installed && problem is null, byScript = state == AshitaLoad.ByScript;
             return new RowData(kind, listing)
             {
-                On = on, HasSwitch = !byScript, CanChange = !readOnly && (canTurnOn || on), Badges = badges,
-                Group = byScript ? Groups.ByScript : null, Team = AshitaTeam(kind, key),
+                On = on && !replaced, HasSwitch = !byScript, CanChange = !readOnly && !replaced && (canTurnOn || on), Badges = badges,
+                Group = byScript ? Groups.ByScript : null, Team = AshitaTeam(kind, key), ReplacedByAutoLogin = replaced,
             };
         }
 
@@ -255,6 +259,14 @@ internal static class AddonsPageBuilder
 
     private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
+    // the game leaves the addon out for those accounts, so it's only locked when that's every one of them
+    private static bool Replaced(string key, string addon, AutoLoginReach reach, List<AddonBadge> badges)
+    {
+        if (reach == AutoLoginReach.Nobody || !Same(key, addon)) return false;
+        badges.Add(reach == AutoLoginReach.EveryAccount ? Badges.ReplacedForEveryone : Badges.ReplacedForSome);
+        return reach == AutoLoginReach.EveryAccount;
+    }
+
     private static AddonBadge? WindowerProblem(WindowerPluginInfo p) =>
         p is { Outdated: true, InterfaceVersion: { } v } ? Badges.Outdated(WindowerPlugins.InterfaceName(v)) : p.NeedsNewerWindower ? Badges.OtherWindower : null;
 
@@ -280,6 +292,11 @@ internal static class AddonsPageBuilder
             "This plugin was built for a different version of Ashita, so Ashita won't load it.", Warn: true);
         public static readonly AddonBadge Incompatible = new(AshitaInstall.IncompatibleText,
             "Provenance keeps this off whenever it starts the game. Your Ashita settings aren't changed.", Warn: true);
+        public static readonly AddonBadge ReplacedForEveryone = new("Replaced by Auto-login",
+            "Provenance's Auto-login does this addon's job, so it doesn't load and is disabled. To use it instead, turn off Accept the licence agreement "
+            + $"and choose {AutoLoginSettings.NoneText} for every account under Auto-login.");
+        public static readonly AddonBadge ReplacedForSome = new("Replaced by Auto-login",
+            "Provenance's Auto-login does this addon's job, so it doesn't load for an account with a character chosen under Auto-login.");
         public static readonly AddonBadge BadName = new("Name Ashita can't load",
             "Ashita can't load a name like this one from a script or boot configuration. Rename it to plain letters and numbers to use it.", Warn: true);
     }

@@ -8,6 +8,7 @@ using Provenance.Common.Settings;
 using Serilog;
 using Provenance.Common;
 using Provenance.Common.Game.Windower;
+using Provenance.Common.Login;
 using Provenance.Wpf.Services;
 using Provenance.Wpf.ViewModels.Shared;
 
@@ -182,7 +183,7 @@ public partial class AddonsPluginsViewModel : ObservableObject
 
     private AddonsPage BuildPage(AddonsTarget target, AddonsScan? scan)
     {
-        try { return AddonsPageBuilder.Build(target, Lists(), _settings.Current.WindowerSharedExtras?.Copy(), scan); }
+        try { return AddonsPageBuilder.Build(target, Lists(), _settings.Current.WindowerSharedExtras?.Copy(), scan, AutoLogin.Reach(_settings.Current)); }
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not read the addons and plugins in {Folder}", target.Folder);

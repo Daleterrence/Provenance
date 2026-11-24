@@ -26,8 +26,8 @@ public sealed partial class AutoLoginSettings : ObservableObject
 {
     public const string IntroText = "Choose a character for each account and Provenance logs in to it once the game starts.";
     public const string NoneText = "Don't log in to a character";
-    public const string NoCharactersText = "Its characters appear here after it has logged in once. Until then you can pick by slot on the game's character list.";
-    public const string OthersText = "Windower's autoenterkey addon and Ashita's autologin addon are left out whenever Auto-login is doing their job.";
+    public const string NoCharactersText = "This account's characters appear here after it has logged in once. Until then you can pick by slot on the game's character list.";
+    public const string OthersText = "Anything that affects login in Windower/Ashita does not load and is disabled whenever Auto-login is doing its job.";
 
     private readonly ISettingsService _settings;
     private bool _loading;

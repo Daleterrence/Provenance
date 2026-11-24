@@ -4,6 +4,8 @@ using Provenance.Common.Social;
 
 namespace Provenance.Common.Login;
 
+public enum AutoLoginReach { Nobody, SomeAccounts, EveryAccount }
+
 public static class AutoLogin
 {
     public const string WindowerAddon = "autoenterkey";
@@ -28,6 +30,12 @@ public static class AutoLogin
             CharacterSlot = !picks && IsSlot(account?.AutoLoginSlot) ? account!.AutoLoginSlot : null,
         };
     }
+
+    // which accounts' games leave the login addons out, the same test as TakesOver
+    public static AutoLoginReach Reach(LauncherSettings settings) =>
+        settings.AcceptLicenceAgreement ? AutoLoginReach.EveryAccount
+        : settings.Profiles.Any(p => IsName(p.AutoLoginCharacter) || IsSlot(p.AutoLoginSlot)) ? AutoLoginReach.SomeAccounts
+        : AutoLoginReach.Nobody;
 
     // a snapshot with no characters in it leaves what's known alone. POL has no slots, so ones the game's list gave are kept
     public static bool Learn(Account account, PolSocialSnapshot snap)

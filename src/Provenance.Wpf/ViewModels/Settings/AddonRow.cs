@@ -27,6 +27,7 @@ public sealed partial class AddonRow : ObservableObject
     [ObservableProperty, NotifyPropertyChangedFor(nameof(SwitchEnabled))] private bool _canChange;
     [ObservableProperty] private bool _canInstall;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(Greyed))] private bool _incompatible;
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(Greyed))] private bool _replacedByAutoLogin;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(Greyed))] private AddonGroup? _group;
     [ObservableProperty, NotifyPropertyChangedFor(nameof(SwitchEnabled))] private bool _installing;
     [ObservableProperty] private bool _visible = true;
@@ -39,7 +40,7 @@ public sealed partial class AddonRow : ObservableObject
     public bool SwitchEnabled => CanChange && !Installing && !_owner.Busy;
 
     internal void OwnerBusyChanged() => OnPropertyChanged(nameof(SwitchEnabled));
-    public bool Greyed => Incompatible || Group is not null;
+    public bool Greyed => Incompatible || ReplacedByAutoLogin || Group is not null;
 
     public bool On
     {
@@ -69,6 +70,7 @@ public sealed partial class AddonRow : ObservableObject
         CanChange = d.CanChange;
         CanInstall = d.CanInstall;
         Incompatible = d.Incompatible;
+        ReplacedByAutoLogin = d.ReplacedByAutoLogin;
         Group = d.Group;
         Team = d.Team;
         VerifiedTip = d.Team is { } team ? $"This {(Kind == AddonKind.Addon ? "addon" : "plugin")} is in {team}'s official list." : null;
