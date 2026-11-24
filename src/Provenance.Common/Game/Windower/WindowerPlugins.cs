@@ -81,9 +81,9 @@ public static class WindowerPlugins
         return list;
     }
 
-    // 0x0004xxxx is Windower 3's interface, Windower 4 packs a byte a part (0x04070300 is 4.7.3.0)
+    // 0x0004xxxx is an early Windower 4 hook's, later ones pack a byte a part (0x04070300 is 4.7.3.0)
     public static string InterfaceName(uint v) =>
-        v >> 16 == 0x0004 ? "Windower 3" : $"Windower {v >> 24}.{(v >> 16) & 0xFF}.{(v >> 8) & 0xFF}.{v & 0xFF}";
+        v >> 16 == 0x0004 ? "an older version of Windower 4" : $"Windower {v >> 24}.{(v >> 16) & 0xFF}.{(v >> 8) & 0xFF}.{v & 0xFF}";
 
     public static bool IsWindowerPlugin(string dllPath) => IsPlugin(PeFile.Load(dllPath));
 
