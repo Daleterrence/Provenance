@@ -79,7 +79,7 @@ public sealed partial class AutoLoginSettings : ObservableObject
 
     private static bool BySlot(Account p) => p.AutoLoginCharacter is null && AutoLogin.IsSlot(p.AutoLoginSlot);
 
-    // slots until the characters are known. One chosen before they were stays on the end, as what's chosen
+    // slots until the characters are known. A slot picked before they were stays on the end of the list, still selected
     private static List<AutoLoginChoice> ChoicesFor(Account p) =>
         p.Characters.Count == 0 ? [new(NoneText), .. Enumerable.Range(1, AutoLogin.Slots).Select(Slot)]
         : BySlot(p) ? [new(NoneText), .. Shown(p), Slot(p.AutoLoginSlot!.Value)]

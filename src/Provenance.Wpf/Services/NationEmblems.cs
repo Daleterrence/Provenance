@@ -8,7 +8,7 @@ public static class NationEmblems
 
     public static BitmapImage? Image(string? key)
     {
-        // reading a pack address before the app exists fixes WPF's resource assembly
+        // reading a pack address before the app exists locks in WPF's resource assembly
 #pragma warning disable RS0030
         if (key is null || System.Windows.Application.Current is null) return null;
 #pragma warning restore RS0030

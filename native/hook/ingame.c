@@ -109,7 +109,7 @@ static void ig_disarm(void)
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
 
-/* nothing's written after this, so one the app had open at that moment is tried again for a second. Never the game's thread */
+/* nothing's written after this, so a file the app has open is tried again for a second. Never the game's thread */
 static void ig_write_off(void)
 {
     jw w = {0};
@@ -183,7 +183,8 @@ static void __cdecl ig_poll(int unused)
         ig_fault("game thread", 1);
     }
     iw_poll(g_ig.b);
-    /* with the friends list off it's only here for the chat's calls to go back, the lobby and my jobs to end */
+    /* with the friends list off, the callback only stays till the chat's calls are put back, the lobby's done and my
+       jobs have ended */
     if (g_ig.off && !fx_patched() && !lb_wanted() && !iw_holding()) ig_disarm();
 }
 
@@ -262,8 +263,8 @@ static int ingame_ready(BYTE *b)
     return 1;
 }
 
-/* once Play has drained and the game's about to boot, on the thread that pumped polcore. With no friends list to keep it
-   only answers the lobby's menus */
+/* once Play has drained and the game's about to boot, on the thread that pumped polcore. With no friends list to keep,
+   it only answers the lobby's menus */
 static void ingame_start(BYTE *b)
 {
     void *cur;

@@ -13,7 +13,7 @@ enum { FX_CMD_FR = FX_CMD_RM + 1, FX_WAITING = 16, FX_ANSWER_MS = 30000, FX_NAME
 enum { FX_ANS_NONE, FX_ANS_WANTED, FX_ANS_RUNNING, FX_ANS_LATE };
 enum { FX_REQ_NO, FX_REQ_NEW, FX_REQ_DONE, FX_REQ_KEPT };
 
-/* 0x1e and a number colours what follows and lasts past a wrap. 0x1f and a chat mode's colour stops at the first one */
+/* 0x1e and a number colours what follows, even past a wrap. 0x1f and a chat mode's colour stops at the first wrap */
 static const char g_fx_blue[] = "\x1e\x70", g_fx_red[] = "\x1e\x44", g_fx_name[] = "\x1e\x01", g_fx_on[] = "\x1e\x02",
                   g_fx_off[] = "\x1e\x09", g_fx_note[] = "\x1e\x06";
 static const char g_fx_not_sent[] = "This message was not sent. Please try again.";
@@ -177,8 +177,8 @@ static void fx_fault(const char *where, const char *step)
 
 typedef BYTE (__fastcall *fx_bind_fn)(BYTE *piece);
 typedef struct { char code[3], pic[17]; short u, v, w, h, qw, qh; } fx_icon_def;
-/* EF and a byte draws slot byte - 0x1f of the chat's icon sheet. 2b to 2d are marks only the French and German clients
-   print, so they're painted over. 4d is the game's own i */
+/* EF and a byte draws slot (byte - 0x1f) of the chat's icon sheet. 2b to 2d are marks only the French and German
+   clients print, so they're painted over. 4d is the game's own i */
 static const fx_icon_def g_fx_icons[] = {
     [FX_ICON_POL] = { "\xef\x2b", "menu    ustatshd", 224, 32, 32, 32, 16, 16 },
     [FX_ICON_AWAY] = { "\xef\x2c", "menu    ustatshd", 96, 64, 32, 32, 16, 16 },
@@ -785,7 +785,7 @@ static BYTE *fx_build(BYTE *b, const fx_send *s)
     return msg;
 }
 
-/* why is what the app is told when one of its own fails, a /m gets the red line */
+/* why is what the app's told when one of its own sends fails, a /m gets the red line instead */
 static void fx_send_done(int ok, const char *why)
 {
     int i;
@@ -899,8 +899,8 @@ static void fx_poll(BYTE *b)
         fx_answer_pump(b);
         g_fx_step = "";
     } __except (fx_caught(GetExceptionInformation())) {
-        /* one already going is left for the wind-down to poll, unless the wind-down's what faulted. A dropped buffer stays,
-           polcore may still have it */
+        /* one already going is left for the wind-down to poll, unless the wind-down's what faulted. A dropped buffer
+           isn't freed, polcore may still have it */
         if (g_fx.job < 0 || g_fx.off) {
             if (g_fx.msg && g_fx.job < 0 && !g_fx.off) {
                 if (g_fx.cur_token[0]) iw_send_result(g_fx.cur_token, "failed:ingame", NULL);
@@ -1029,7 +1029,7 @@ static void fx_game_tick(BYTE *b)
                 SetEvent(g_ig.wake);
             }
         }
-        /* moves the worker finishes after a fault still count */
+        /* moves the worker finishes after a fault still bring the unread count down */
         fx_count_down();
         if (!g_fx.off && g_fx.in_world && g_fx.watching) fx_print_queued(b);
     } __except (fx_caught(GetExceptionInformation())) {
@@ -1319,8 +1319,8 @@ static void fx_playing_as(const fx_presence *p, char *text, int cap)
     fx_append(text, cap, ")");
 }
 
-/* only a friend seen before gets a line, a row new to the list is just noted. A burst in one copy is the list reloading or
-   the connection dropping, not friends */
+/* only a friend seen before gets a line, a row new to the list is just noted. A burst of changes in one copy is the
+   list reloading or the connection dropping, not friends coming and going */
 static void fx_friend_lines(void)
 {
     enum { NONE, PRESENCE, STARTED, STOPPED };
@@ -1364,7 +1364,8 @@ static void fx_friend_lines(void)
         if (!p->on || !p->game) p->start_at = 0;
         if (!p->start_at) p->held = 0;
         if (!p->on || p->game) p->stop_at = 0;
-        /* straight from offline into the game is the one line. Leaving it waits a moment, they're usually going offline too */
+        /* straight from offline into the game only gets the playing line. Leaving the game waits a moment, they're
+           usually going offline too */
         if (p->game_changed && p->on && p->game) {
             p->start_at = show && game_lines && fx_name_coming(p) ? tick : 0;
             p->held = p->start_at && p->changed;

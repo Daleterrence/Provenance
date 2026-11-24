@@ -12,7 +12,7 @@ public static class ProfilePictureAssets
     private const string Root = "pack://application:,,,/Provenance;component/Assets/profile-pictures/";
     private static Dictionary<int, ProfilePictureAssetMeta>? _meta;
 
-    // reading a pack address before the app exists fixes WPF's resource assembly, so nothing's read until there is one
+    // reading a pack address before the app exists locks in WPF's resource assembly, so nothing's read till there's one
     private static Dictionary<int, ProfilePictureAssetMeta> Meta()
     {
         if (_meta is not null) return _meta;

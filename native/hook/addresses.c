@@ -173,8 +173,8 @@ static struct hook_addr g_addr[ADDRESS_COUNT] = {
     [AT_GCHAT_LINE_HELD] = { .name = "group chat line", .module = IN_POLCORE, .code = IS_DATA, .required = REQUIRED,
         .usual = 0x112de0, .sig_at = 0x21cb5, .operand = 10,
         .sig = "8d 44 24 18 8d 54 09 08 52 68 ?? ?? ?? ??" },
-    /* POLCON_POLL is IDLE and then the pointer if it's set. Nothing in polcore sets it, so it's the one place that runs after
-       each of the game's pumps without a table slot being swapped */
+    /* POLCON_POLL calls IDLE and then the pointer if it's set. Nothing in polcore sets it, so it's the one place that
+       runs after each of the game's pumps without a table slot being swapped */
     [AT_POLL_CALLBACK] = { .name = "POLL callback", .module = IN_POLCORE, .code = IS_DATA, .required = SKIPPABLE,
         .usual = 0x435528, .sig_at = 0x45750, .operand = 9,
         .sig = "56 e8 ?? ?? ?? ?? 8b f0 a1 ?? ?? ?? ?? 85 c0 74 07 6a 00 ff d0 83 c4 04 8b c6 5e c3" },

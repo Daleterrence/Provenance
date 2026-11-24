@@ -145,7 +145,7 @@ static int iw_game_idle(void)
     return !(*(DWORD *)jobs & 6) && !*(int *)(list + 0x128) && !*pc_addr_of(g_fx.base, AT_FX_MAIL_BUSY);
 }
 static int iw_edit_ready(BYTE *b) { return iw_world(b) && iw_slots(b) && iw_mine_idle() && g_fx.ans_state == FX_ANS_NONE && iw_game_idle(); }
-/* /fr worked before the game's friend jobs could be looked at, so a build without them still answers */
+/* a build where the game's friend jobs aren't found still answers /fr, it just can't wait for them to be idle */
 static int iw_answer_ready(BYTE *b)
 {
     if (!pc_addr_found(AT_FX_FRIEND_JOBS) || !pc_addr_found(AT_FX_FRIEND_STATE) || !pc_addr_found(AT_FX_MAIL_BUSY))
@@ -245,7 +245,6 @@ static void iw_comment_step(BYTE *b)
     iw_set(&g_iw.edit, g_iw.up_token, r == 1 ? "saved" : requests_failed(r));
 }
 
-/* polcore's own status, svc 0x338, moves once the game's two changes have gone */
 /* the records are read on the worker, the game's thread only starts and polls the jobs */
 static void iw_search_step(BYTE *b)
 {
@@ -263,6 +262,7 @@ static void iw_search_step(BYTE *b)
     if (!g_search.step || g_search.step == 5) iw_changed();
 }
 
+/* polcore's own status, svc 0x338, moves once the game's two changes have gone */
 static void iw_status_step(BYTE *b)
 {
     if (g_iw.status_want < 0) return;
@@ -282,7 +282,8 @@ static int iw_status(BYTE *b, char *buf)
     if (want != 0 && want != 1 && want != 4) return 1;
     if (!(obj = *(BYTE **)pc_addr_of(g_fx.base, AT_FX_STATUS_OBJ)) || !(entry = *(BYTE **)(obj + 0x30)) || entry[1]) return 0;
     g_iw_step = "status";
-    /* the game's own pair, as /away does it. The first is 0 with no game connection, and then the game changes nothing */
+    /* the game's own pair of calls, as /away makes them. The first returns 0 with no game connection, and then the game
+       changes nothing */
     if (!((iw_away_fn)pc_addr_of(g_fx.base, AT_FX_AWAY_FLAG))(1, want == 1)) {
         g_iw_step = "";
         return 0;

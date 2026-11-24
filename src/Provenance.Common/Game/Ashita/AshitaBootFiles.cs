@@ -283,7 +283,8 @@ public static class AshitaBootFiles
         return target;
     }
 
-    // the player's script stays as it is, the launch copy runs a copy of it with those loads commented out
+    // the player's script stays as it is, the launch copy of the boot configuration runs a copy of the script with
+    // those loads commented out
     private static void LeaveOutAddons(string ashitaDir, AshitaIniFile ini, string? bootName, IReadOnlyList<string> names)
     {
         try

@@ -80,7 +80,7 @@ internal sealed class SearchRefresh(Func<int, bool> hasServer)
         w.Dirty = true;
     }
 
-    // playing but not listed is usually someone still loading in, so they get a few sooner asks
+    // playing but not listed is usually someone still loading in, so their world gets searched again sooner for a while
     private static bool StillArrivingIn(World w, IReadOnlyCollection<CharacterId> unlisted, DateTime now)
     {
         var keys = unlisted.Select(c => c.Key).ToHashSet(StringComparer.Ordinal);

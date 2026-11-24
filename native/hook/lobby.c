@@ -54,7 +54,7 @@ static int lb_slot(const char *s)
     return !*s && n >= 1 && n <= LB_ENTRIES ? n : 0;
 }
 
-/* at Play: what's asked for. 1 when the callback has to be there for it */
+/* reads what's asked for at Play. 1 when the callback has to be there for it */
 static int lb_ready(BYTE *b)
 {
     char v[8], name[32];
@@ -117,7 +117,7 @@ static void lb_look(ULONGLONG now)
         g_fx.resolved = 0;
 }
 
-/* whether the looking for FFXiMain's addresses is over, so a missing one is missing for good */
+/* whether it's done looking for FFXiMain's addresses, so a missing one is missing for good */
 static int lb_looked(void)
 {
     return g_lb.tried >= FX_TRIES || g_fx.found || g_fx.tries >= FX_TRIES;

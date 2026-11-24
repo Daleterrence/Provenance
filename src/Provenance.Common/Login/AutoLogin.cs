@@ -68,7 +68,8 @@ public static class AutoLogin
         if (!same) account.Characters = found;
         if (account.AutoLoginCharacter is { } chosen && !found.Any(c => Chosen(account, c)))
         {
-            // the only character by that name is still the one, whatever world it was saved with. A namesake it already had isn't
+            // the only character by that name is still the one, whatever world it was saved with. Not if the account
+            // already had more than one by that name
             var named = lone ? found.Where(c => Named(c, chosen)).ToList() : [];
             (account.AutoLoginCharacter, account.AutoLoginWorld) = named.Count == 1 ? (named[0].Name, named[0].World) : (null, null);
         }

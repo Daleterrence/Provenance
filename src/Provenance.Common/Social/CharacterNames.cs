@@ -80,7 +80,7 @@ public sealed class CharacterNames
         Save();
     }
 
-    // never a shown name: only the profile says whether that's private
+    // only ever fills in Heard, never the shown name, as only the profile says whether that's private
     public bool Learn(string key, string? name)
     {
         if (name is null || !Plain.IsMatch(name)) return false;

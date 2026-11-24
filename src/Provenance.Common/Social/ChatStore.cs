@@ -539,7 +539,7 @@ public sealed class ChatStore
         }
         if (_older is not null)
         {
-            // once the session has a line of its own it speaks for it, or deleting it here would bring the old copy back
+            // the session's own copy of a line wins once it has one, or deleting it here would bring the old one back
             var mine = entries.Select(e => e.Key).ToHashSet(StringComparer.Ordinal);
             _older.RemoveAll(e => mine.Contains(e.Key));
             entries = [.. _older, .. entries];

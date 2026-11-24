@@ -644,7 +644,7 @@ public partial class MainViewModel : ObservableObject
             if (_accountCheck.Capture(snap)) return;
             if (_pol.Pid is null) return;
             if (Multi.Running) { Multi.RunSnapshot = snap; return; }
-            // the sampler's, whilst the game runs: the friends, my status and how the game side's writes went
+            // the sampler's snapshot whilst the game runs, with friends, my status and how the game side's writes went
             if (snap.Sampler.Length > 0)
             {
                 try { Social.ApplyGame(snap); }
