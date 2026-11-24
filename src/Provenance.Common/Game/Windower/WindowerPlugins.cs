@@ -16,6 +16,7 @@ public sealed record WindowerPluginInfo
     public bool HasResources { get; init; }
     public uint? InterfaceVersion { get; init; }
     public bool Outdated { get; init; }
+    public bool NeedsNewerWindower { get; init; }
 }
 
 public static class WindowerPlugins
@@ -76,9 +77,13 @@ public static class WindowerPlugins
         if (current is { } now)
             for (int i = 0; i < list.Count; i++)
                 if (list[i] is { Installed: true, IsWindowerPlugin: true, Required: false, InterfaceVersion: { } v } && v != now)
-                    list[i] = list[i] with { Outdated = true };
+                    list[i] = list[i] with { Outdated = v < now, NeedsNewerWindower = v > now };
         return list;
     }
+
+    // 0x0004xxxx is Windower 3's interface, Windower 4 packs a byte a part (0x04070300 is 4.7.3.0)
+    public static string InterfaceName(uint v) =>
+        v >> 16 == 0x0004 ? "Windower 3" : $"Windower {v >> 24}.{(v >> 16) & 0xFF}.{(v >> 8) & 0xFF}.{v & 0xFF}";
 
     public static bool IsWindowerPlugin(string dllPath) => IsPlugin(PeFile.Load(dllPath));
 

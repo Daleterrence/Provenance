@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using Provenance.Common;
 using Provenance.Common.Game.Ashita;
@@ -89,7 +90,7 @@ internal static class AddonsPageBuilder
         var loadedAddons = Reasons(dir, profile, scan, AddonKind.Addon, addonNames);
 
         RowData Row(AddonKind kind, AddonListing listing, bool isInstalled, bool installable, bool windowerPlugin = true, bool official = false,
-                    bool outdated = false)
+                    AddonBadge? problem = null)
         {
             var key = listing.Key;
             var on = Listed(kind == AddonKind.Addon ? effective.Addons : effective.Plugins, key);
@@ -101,9 +102,9 @@ internal static class AddonsPageBuilder
                 badges.Add(Badges.NotAPlugin);
                 canTurnOn = false;
             }
-            else if (outdated)
+            else if (problem is not null)
             {
-                badges.Add(Badges.OtherWindower);
+                badges.Add(problem);
                 canTurnOn = false;
             }
             var loaded = kind == AddonKind.Addon ? loadedAddons : loadedPlugins;
@@ -126,7 +127,7 @@ internal static class AddonsPageBuilder
         AddonListing Linked(AddonListing l) =>
             scan.AddonsXml.ContainsKey(l.Key) && scan.Tree?.Find(l.Key) is { } t && WindowerAddonTree.ReadmeLink(t, file.Branch) is { } link
                 ? l with { Docs = new AddonDocs(AddonDocsKind.Link, link) } : l;
-        page.Plugins = plugins.Select(p => Row(AddonKind.Plugin, p.Listing, p.Installed, p.InManifest, p.IsWindowerPlugin, official: p.InManifest, outdated: p.Outdated))
+        page.Plugins = plugins.Select(p => Row(AddonKind.Plugin, p.Listing, p.Installed, p.InManifest, p.IsWindowerPlugin, official: p.InManifest, problem: WindowerProblem(p)))
             .Concat(missingPlugins.Select(n => Row(AddonKind.Plugin, AddonListing.Named(n), false, false)))
             .OrderBy(r => r.Listing.Name, StringComparer.OrdinalIgnoreCase).ToList();
         page.Addons = scan.Addons.Select(a => Row(AddonKind.Addon, Linked(a.Listing), true, false, official: repo.Contains(a.Listing.Key)))
@@ -224,7 +225,7 @@ internal static class AddonsPageBuilder
             script.Addons.Select(a => a.Name), script.Addon);
         page.Plugins = Rows(AddonKind.Plugin,
             scan.Plugins.Where(p => p.Kind == AshitaPluginKind.Plugin)
-                .Select(p => (p.Listing, p.ForOtherAshita ? Badges.OtherAshita : (AddonBadge?)null)),
+                .Select(p => (p.Listing, AshitaProblem(p))),
             script.Plugins.Select(p => p.Name), script.Plugin);
 
         var pol = boot.PolPlugins;
@@ -233,7 +234,7 @@ internal static class AddonsPageBuilder
         var polRows = polFound.Select(p => AshitaPolPlugins.IsTakeover(p.Listing.Key)
             ? new RowData(AddonKind.PolPlugin, p.Listing with { Description = AshitaPolPlugins.IncompatibleReason(p.Listing.Key) })
                 { CanChange = false, Incompatible = true, Badges = [Badges.Incompatible], Team = AshitaTeam(AddonKind.PolPlugin, p.Listing.Key) }
-            : Row(AddonKind.PolPlugin, p.Listing, PolState(p.Listing.Key), true, p.ForOtherAshita ? Badges.OtherAshita : null)).ToList();
+            : Row(AddonKind.PolPlugin, p.Listing, PolState(p.Listing.Key), true, AshitaProblem(p))).ToList();
         var turnedOn = pol.Where(p => p.On && !AshitaPolPlugins.IsTakeover(p.Name)).Select(p => p.Name);
         polRows.AddRange(Missing(turnedOn, polFound.Select(p => p.Listing.Key))
             .Select(n => Row(AddonKind.PolPlugin, AddonListing.Named(n), AshitaLoad.On, false)));
@@ -254,6 +255,14 @@ internal static class AddonsPageBuilder
 
     private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
+    private static AddonBadge? WindowerProblem(WindowerPluginInfo p) =>
+        p is { Outdated: true, InterfaceVersion: { } v } ? Badges.Outdated(WindowerPlugins.InterfaceName(v)) : p.NeedsNewerWindower ? Badges.OtherWindower : null;
+
+    // Ashita shows interface versions to two places itself (4.20, 4.30)
+    private static AddonBadge? AshitaProblem(AshitaPlugin p) =>
+        p is { Outdated: true, InterfaceVersion: { } v } ? Badges.Outdated("Ashita " + v.ToString("0.00", CultureInfo.InvariantCulture))
+        : p.ForOtherAshita ? Badges.OtherAshita : null;
+
     private static class Badges
     {
         public static readonly AddonBadge Install = new("Not installed", "Press Install to add it to your Windower folder.");
@@ -261,6 +270,8 @@ internal static class AddonsPageBuilder
         public static readonly AddonBadge NotInAshita = new("Not installed", "It's named in this boot configuration, but it isn't in your Ashita folder.");
         public static readonly AddonBadge NotAPlugin = new("Not a Windower plugin",
             "This file in Windower's plugins folder isn't a Windower 4 plugin, so it can't be turned on.", Warn: true);
+        public static AddonBadge Outdated(string madeFor) =>
+            new("Outdated", $"This plugin was made for {madeFor}. It needs updating before it will work again.", Warn: true);
         public static readonly AddonBadge OtherWindower = new("Built for a different Windower",
             "This plugin was built for a different version of Windower, so Windower won't load it.", Warn: true);
         public static readonly AddonBadge NotForV4 = new("Not for Ashita v4",

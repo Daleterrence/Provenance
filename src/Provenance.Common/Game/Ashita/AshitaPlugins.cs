@@ -5,7 +5,10 @@ namespace Provenance.Common.Game.Ashita;
 
 public enum AshitaPluginKind { Plugin, PolPlugin }
 
-public sealed record AshitaPlugin(AddonListing Listing, AshitaPluginKind Kind, double? Version, double? InterfaceVersion, bool ForOtherAshita);
+public sealed record AshitaPlugin(AddonListing Listing, AshitaPluginKind Kind, double? Version, double? InterfaceVersion, bool ForOtherAshita)
+{
+    public bool Outdated { get; init; }
+}
 
 public static class AshitaPlugins
 {
@@ -78,6 +81,6 @@ public static class AshitaPlugins
         // the getters hand back float constants widened to double (4.0999...), Ashita prints them with %.2f
         var listing = new AddonListing(loadName, AddonListing.Clean(meta?.Name) ?? loadName, meta?.Version.ToString("0.00", CultureInfo.InvariantCulture),
                                        AddonListing.Clean(meta?.Author), AddonListing.Clean(meta?.Description), dll);
-        return new AshitaPlugin(listing, kind, meta?.Version, iface, iface is { } i && i != core);
+        return new AshitaPlugin(listing, kind, meta?.Version, iface, iface is { } i && i != core) { Outdated = iface is { } o && o < core };
     }
 }

@@ -9,7 +9,7 @@ public sealed record WindowerLaunchLists(IReadOnlyList<string> RequiredPlugins, 
 
 public sealed class WindowerAddonList
 {
-    public const string OutdatedReason = "built for a different version of Windower";
+    public const string OutdatedReason = "outdated", NewerReason = "made for a newer Windower";
 
     public bool UseGlobal { get; set; } = true;
     public List<string> Addons { get; set; } = [];
@@ -66,6 +66,7 @@ public sealed class WindowerAddonList
             var p = plugins.FirstOrDefault(x => x.Listing.Key.Equals(n, StringComparison.OrdinalIgnoreCase));
             if (p is { Required: true }) continue;
             if (p is { Installed: true, IsWindowerPlugin: true, Outdated: true }) skipped.Add($"{n} ({OutdatedReason})");
+            else if (p is { Installed: true, IsWindowerPlugin: true, NeedsNewerWindower: true }) skipped.Add($"{n} ({NewerReason})");
             else if (p is { Installed: true, IsWindowerPlugin: true }) sendPlugins.Add(p.Listing.Key);
             else skipped.Add(p is { Installed: true } ? $"{n} (not a Windower plugin)" : $"{n} (not installed)");
         }
@@ -87,7 +88,7 @@ public sealed class WindowerAddonList
             if (Already(n, loads.Addons) is { } why) { sendAddons.Remove(n); skipped.Add(why); }
         var fromInit = addons.Where(a => loads.Addons.GetValueOrDefault(a.Listing.Key) == ScriptLoads.InitCommand).Select(a => a.Listing.Key).ToList();
         sendAddons.AddRange(fromInit.Where(n => !sendAddons.Contains(n, StringComparer.OrdinalIgnoreCase)));
-        var pluginsFromInit = plugins.Where(p => p is { Installed: true, IsWindowerPlugin: true, Required: false, Outdated: false }
+        var pluginsFromInit = plugins.Where(p => p is { Installed: true, IsWindowerPlugin: true, Required: false, Outdated: false, NeedsNewerWindower: false }
                                                  && loads.Plugins.GetValueOrDefault(p.Listing.Key) == ScriptLoads.InitCommand).Select(p => p.Listing.Key).ToList();
         sendPlugins = plugins.Select(p => p.Listing.Key).Where(n => sendPlugins.Contains(n) || pluginsFromInit.Contains(n)).ToList();
         return new WindowerLaunchLists(required, sendPlugins, sendAddons, skipped) { InitCommandAddons = fromInit, InitCommandPlugins = pluginsFromInit };
