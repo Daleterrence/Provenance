@@ -2,10 +2,8 @@
 .SYNOPSIS
     Downloads Provenance's images into this checkout's assets folder.
 .DESCRIPTION
-    The images aren't in the repository. tools\assets.json names the zip this commit builds with and its SHA-256. This
-    downloads that zip, checks it against the hash and unpacks it into assets\. It does nothing when the right ones are
-    already there, and native\build-native.ps1 and tools\pack-release.ps1 run it for you when there are no images.
-    A folder set in PROVENANCE_ASSETS is used instead of the downloaded one.
+    Fetches the zip tools\assets.json names, checks its SHA-256 and unpacks it into assets\. A folder set in
+    PROVENANCE_ASSETS is used instead.
 .EXAMPLE
     pwsh tools/get-assets.ps1
 #>

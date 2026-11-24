@@ -13,7 +13,7 @@ internal sealed class ChatJournal(string path)
     public const int MostBatches = 100;
     public const int MostBytes = 256 * 1024;
 
-    // format constant, same deal as the log's own
+    // changing this would leave every saved journal unreadable
     private static readonly byte[] Entropy = Encoding.ASCII.GetBytes("Provenance PlayOnline chat log journal v1");
 
     // Base is the hash of the log it was written on top of, Count how many lines there were before it

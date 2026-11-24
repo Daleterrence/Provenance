@@ -1,5 +1,5 @@
-/* keeps the friends list up to date while the game runs. POLL's callback copies polcore's rows (microseconds, on the
-   game's thread) and a worker writes them out. Any fault switches it off for the rest of the game. */
+/* keeps the friends list up to date while the game runs. POLL's callback copies polcore's rows on the game's thread and a
+   worker writes them out. Any fault switches it off */
 enum { IG_FRIENDS = 200, IG_IGNORES = 100, IG_SAMPLE_MS = 500, IG_BEAT_MS = 5000, IG_RETRY_MS = 250, IW_BEAT_MS = 150 };
 
 typedef struct ig_copy {

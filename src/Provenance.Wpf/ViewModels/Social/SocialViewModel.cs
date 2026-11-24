@@ -344,8 +344,8 @@ public partial class SocialViewModel : ObservableObject, ISocialSession
         if (GameFeedLive ? Now - _gameFeedAt > GameFeedStale : _gameFeedExpected && Now - _gameBegan > GameFeedGrace) LoseGameFeed();
     }
 
-    // what the sampler sends whilst the game runs: the friends, who's ignored, my status and comment, and how the writes the
-    // game side took went. Everything else stays as the last snapshot from the hold had it, as nothing else can change in the game
+    // what the sampler sends whilst the game runs: friends, ignores, my status and comment, and how the writes went. The rest
+    // stays as the hold's last snapshot had it
     internal void ApplyGame(PolSocialSnapshot snap)
     {
         if (!GameRunning) return;

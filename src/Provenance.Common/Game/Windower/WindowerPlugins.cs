@@ -87,7 +87,7 @@ public static class WindowerPlugins
 
     internal static PeFacts Facts(PeFile pe) => IsPlugin(pe) ? new PeFacts(true, pe.FileVersion, InterfaceVersion(pe)) : new PeFacts(false, pe.FileVersion);
 
-    // GetInterfaceVersion is "mov eax, imm32; ret", maybe behind a push ebp frame or a jmp or two
+    // GetInterfaceVersion is "mov eax, imm32" then ret, maybe behind a push ebp frame or a jmp or two
     internal static uint? InterfaceVersion(PeFile pe)
     {
         if (!pe.Exports.TryGetValue("GetInterfaceVersion", out var rva)) return null;

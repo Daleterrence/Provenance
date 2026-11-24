@@ -378,8 +378,8 @@ static void fx_restore(int id, void *ours, DWORD was)
     FlushInstructionCache(GetCurrentProcess(), site, 5);
 }
 
-/* the getter is mov eax,[manager]; test; jz; mov ax,[eax+0xa]. Our moves bring that count down the way the game's own do,
-   or it only ever rises and trips the game's 200 trim */
+/* the getter reads the count at [manager]+0xa. Our moves bring it down the way the game's own do, or it only ever rises
+   and trips the game's 200 trim */
 static void fx_find_unread(void)
 {
     static const BYTE shape[] = { 0x85, 0xc0, 0x74, 0x06, 0x66, 0x8b, 0x40, 0x0a };
