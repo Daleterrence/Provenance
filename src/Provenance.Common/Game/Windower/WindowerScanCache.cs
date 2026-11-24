@@ -6,11 +6,11 @@ using Serilog;
 
 namespace Provenance.Common.Game.Windower;
 
-internal readonly record struct PeFacts(bool IsPlugin, Version? Version);
+internal readonly record struct PeFacts(bool IsPlugin, Version? Version, uint? Interface = null);
 
 internal sealed class WindowerScanCache
 {
-    private const int Format = 1;
+    private const int Format = 2;
     private const long MaxFileBytes = 4 << 20;
     private const int MaxRows = 20000;
     // a file touched this recently could still change within the clock's tick without its time moving
@@ -24,6 +24,7 @@ internal sealed class WindowerScanCache
         public long Created { get; set; }
         public bool? Plugin { get; set; }
         public string? Version { get; set; }
+        public uint? Interface { get; set; }
         public string? Assembly { get; set; }
     }
 
@@ -124,15 +125,16 @@ internal sealed class WindowerScanCache
             var key = Key(path);
             FileRow? row = null;
             if (key is not null && _files.TryGetValue(key, out row) && Same(row, fi) && row.Plugin is { } plugin && Sound(row.Version))
-                return new PeFacts(plugin, row.Version is null ? null : System.Version.Parse(row.Version));
+                return new PeFacts(plugin, row.Version is null ? null : System.Version.Parse(row.Version), row.Interface);
             Reads.Add(key ?? path);
             if (PeFile.Load(path) is not { } pe) return null;
-            var facts = new PeFacts(WindowerPlugins.IsPlugin(pe), pe.FileVersion);
+            var facts = WindowerPlugins.Facts(pe);
             if (key is not null && Cacheable(fi))
             {
                 var next = row is not null && Same(row, fi) ? row : Fresh(key, fi);
                 next.Plugin = facts.IsPlugin;
                 next.Version = facts.Version?.ToString();
+                next.Interface = facts.Interface;
                 _files[key] = next;
                 _dirty = true;
             }

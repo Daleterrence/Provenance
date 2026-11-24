@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using Provenance.Common.Game.ThirdParty;
 
 namespace Provenance.Common.Game.Windower;
@@ -13,6 +14,8 @@ public sealed record WindowerPluginInfo
     public bool Required { get; init; }
     public bool Hidden { get; init; }
     public bool HasResources { get; init; }
+    public uint? InterfaceVersion { get; init; }
+    public bool Outdated { get; init; }
 }
 
 public static class WindowerPlugins
@@ -40,7 +43,7 @@ public static class WindowerPlugins
         {
             if (cache is not null) return cache.Pe(f.Path, f.Info);
             var pe = PeFile.Load(f.Path);
-            return pe is null ? null : new PeFacts(IsPlugin(pe), pe.FileVersion);
+            return pe is null ? null : Facts(pe);
         }
         var list = new List<WindowerPluginInfo>();
         var manifest = WindowerManifest.LoadCached(windowerDir);
@@ -56,7 +59,7 @@ public static class WindowerPlugins
                 Listing = new AddonListing(m.Name, m.Name, ((version ?? m.Version)?.ToString()), null, string.IsNullOrWhiteSpace(m.Description) ? null : m.Description, path),
                 Installed = path is not null, IsWindowerPlugin = path is null || facts is { IsPlugin: true }, InManifest = true,
                 ManifestVersion = m.Version, FileVersion = version,
-                Required = m.Required, Hidden = m.Hidden, HasResources = m.Resources,
+                Required = m.Required, Hidden = m.Hidden, HasResources = m.Resources, InterfaceVersion = facts?.Interface,
             });
         }
         foreach (var (name, found) in dlls.OrderBy(d => d.Key, StringComparer.OrdinalIgnoreCase))
@@ -65,9 +68,15 @@ public static class WindowerPlugins
             list.Add(new WindowerPluginInfo
             {
                 Listing = new AddonListing(name, name, facts?.Version?.ToString(), null, null, found.Path),
-                Installed = true, IsWindowerPlugin = facts is { IsPlugin: true }, FileVersion = facts?.Version,
+                Installed = true, IsWindowerPlugin = facts is { IsPlugin: true }, FileVersion = facts?.Version, InterfaceVersion = facts?.Interface,
             });
         }
+        // Windower's hook skips any plugin whose interface isn't its own, and LuaCore is always built for the hook that's there
+        var current = list.FirstOrDefault(p => p.Installed && p.Listing.Key.Equals("LuaCore", StringComparison.OrdinalIgnoreCase))?.InterfaceVersion;
+        if (current is { } now)
+            for (int i = 0; i < list.Count; i++)
+                if (list[i] is { Installed: true, IsWindowerPlugin: true, Required: false, InterfaceVersion: { } v } && v != now)
+                    list[i] = list[i] with { Outdated = true };
         return list;
     }
 
@@ -75,4 +84,29 @@ public static class WindowerPlugins
 
     internal static bool IsPlugin(PeFile? pe) =>
         pe is { Machine: PeFile.MachineI386 } && RequiredExports.All(x => pe.Exports.ContainsKey(x));
+
+    internal static PeFacts Facts(PeFile pe) => IsPlugin(pe) ? new PeFacts(true, pe.FileVersion, InterfaceVersion(pe)) : new PeFacts(false, pe.FileVersion);
+
+    // GetInterfaceVersion is "mov eax, imm32; ret", maybe behind a push ebp frame or a jmp or two
+    internal static uint? InterfaceVersion(PeFile pe)
+    {
+        if (!pe.Exports.TryGetValue("GetInterfaceVersion", out var rva)) return null;
+        ulong at = rva;
+        for (int hops = 0; hops < 3; hops++)
+        {
+            var b = pe.AtRva(at, 16);
+            if (b.Length >= 5 && b[0] == 0xE9)
+            {
+                at = (ulong)((long)at + 5 + BinaryPrimitives.ReadInt32LittleEndian(b[1..]));
+                continue;
+            }
+            int i = b.Length >= 3 && b[0] == 0x55 && b[1] == 0x8B && b[2] == 0xEC ? 3 : 0;
+            if (b.Length < i + 6 || b[i] != 0xB8) return null;
+            uint value = BinaryPrimitives.ReadUInt32LittleEndian(b[(i + 1)..]);
+            int end = i + 5;
+            if (i == 3 && b.Length > end && b[end] == 0x5D) end++;
+            return b.Length > end && b[end] == 0xC3 ? value : null;
+        }
+        return null;
+    }
 }

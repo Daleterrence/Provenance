@@ -88,7 +88,8 @@ internal static class AddonsPageBuilder
         var loadedPlugins = Reasons(dir, profile, scan, AddonKind.Plugin, pluginNames);
         var loadedAddons = Reasons(dir, profile, scan, AddonKind.Addon, addonNames);
 
-        RowData Row(AddonKind kind, AddonListing listing, bool isInstalled, bool installable, bool windowerPlugin = true, bool official = false)
+        RowData Row(AddonKind kind, AddonListing listing, bool isInstalled, bool installable, bool windowerPlugin = true, bool official = false,
+                    bool outdated = false)
         {
             var key = listing.Key;
             var on = Listed(kind == AddonKind.Addon ? effective.Addons : effective.Plugins, key);
@@ -98,6 +99,11 @@ internal static class AddonsPageBuilder
             else if (!windowerPlugin)
             {
                 badges.Add(Badges.NotAPlugin);
+                canTurnOn = false;
+            }
+            else if (outdated)
+            {
+                badges.Add(Badges.OtherWindower);
                 canTurnOn = false;
             }
             var loaded = kind == AddonKind.Addon ? loadedAddons : loadedPlugins;
@@ -120,7 +126,7 @@ internal static class AddonsPageBuilder
         AddonListing Linked(AddonListing l) =>
             scan.AddonsXml.ContainsKey(l.Key) && scan.Tree?.Find(l.Key) is { } t && WindowerAddonTree.ReadmeLink(t, file.Branch) is { } link
                 ? l with { Docs = new AddonDocs(AddonDocsKind.Link, link) } : l;
-        page.Plugins = plugins.Select(p => Row(AddonKind.Plugin, p.Listing, p.Installed, p.InManifest, p.IsWindowerPlugin, official: p.InManifest))
+        page.Plugins = plugins.Select(p => Row(AddonKind.Plugin, p.Listing, p.Installed, p.InManifest, p.IsWindowerPlugin, official: p.InManifest, outdated: p.Outdated))
             .Concat(missingPlugins.Select(n => Row(AddonKind.Plugin, AddonListing.Named(n), false, false)))
             .OrderBy(r => r.Listing.Name, StringComparer.OrdinalIgnoreCase).ToList();
         page.Addons = scan.Addons.Select(a => Row(AddonKind.Addon, Linked(a.Listing), true, false, official: repo.Contains(a.Listing.Key)))
@@ -255,6 +261,8 @@ internal static class AddonsPageBuilder
         public static readonly AddonBadge NotInAshita = new("Not installed", "It's named in this boot configuration, but it isn't in your Ashita folder.");
         public static readonly AddonBadge NotAPlugin = new("Not a Windower plugin",
             "This file in Windower's plugins folder isn't a Windower 4 plugin, so it can't be turned on.", Warn: true);
+        public static readonly AddonBadge OtherWindower = new("Built for a different Windower",
+            "This plugin was built for a different version of Windower, so Windower won't load it.", Warn: true);
         public static readonly AddonBadge NotForV4 = new("Not for Ashita v4",
             "This addon was written for Windower or an older Ashita, so it won't run in Ashita v4.", Warn: true);
         public static readonly AddonBadge OtherAshita = new("Built for a different Ashita",

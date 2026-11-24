@@ -9,6 +9,8 @@ public sealed record WindowerLaunchLists(IReadOnlyList<string> RequiredPlugins, 
 
 public sealed class WindowerAddonList
 {
+    public const string OutdatedReason = "built for a different version of Windower";
+
     public bool UseGlobal { get; set; } = true;
     public List<string> Addons { get; set; } = [];
     public List<string> Plugins { get; set; } = [];
@@ -63,7 +65,8 @@ public sealed class WindowerAddonList
         {
             var p = plugins.FirstOrDefault(x => x.Listing.Key.Equals(n, StringComparison.OrdinalIgnoreCase));
             if (p is { Required: true }) continue;
-            if (p is { Installed: true, IsWindowerPlugin: true }) sendPlugins.Add(p.Listing.Key);
+            if (p is { Installed: true, IsWindowerPlugin: true, Outdated: true }) skipped.Add($"{n} ({OutdatedReason})");
+            else if (p is { Installed: true, IsWindowerPlugin: true }) sendPlugins.Add(p.Listing.Key);
             else skipped.Add(p is { Installed: true } ? $"{n} (not a Windower plugin)" : $"{n} (not installed)");
         }
         sendPlugins = plugins.Select(p => p.Listing.Key).Where(sendPlugins.Contains).ToList();
