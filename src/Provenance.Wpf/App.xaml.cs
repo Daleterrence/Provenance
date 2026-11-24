@@ -134,6 +134,7 @@ public partial class App : Application
             if (uiThread is null) Log.Warning("The settings were built with no UI thread to hand changes to");
             credentials = new CredentialService();
             settings = new SettingsService(SettingsService.DefaultPath, uiThread);
+            LogStartupLine(settings);
             HookFiles.SetGameSound(settings.Current.GameMessageSound);
             HookFiles.SetGameFriendLines(settings.Current.GameFriendLines);
             HookFiles.SetGamePlayingLines(settings.Current.GamePlayingLines);
@@ -146,6 +147,17 @@ public partial class App : Application
             StartupErrors.Show("Provenance can't start", StartupFailedText, offerLogs: true);
             return false;
         }
+    }
+
+    private static void LogStartupLine(SettingsService settings)
+    {
+        try
+        {
+            var region = settings.DetectedRegion ?? FeedService.Resolve(settings.Current.FeedRegion, null);
+            Log.Information("{Line:l}", StartupLine.For(VersionTag.OwnText() ?? "dev", Environment.OSVersion.Version,
+                settings.Current.ThirdPartyHookPlatform, region));
+        }
+        catch (Exception ex) { Log.Warning(ex, "Couldn't log what Provenance is running on"); }
     }
 
     private static void SweepOldHookFiles()
