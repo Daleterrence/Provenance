@@ -104,7 +104,11 @@ public static class WindowerPlugins
             if (b.Length < i + 6 || b[i] != 0xB8) return null;
             uint value = BinaryPrimitives.ReadUInt32LittleEndian(b[(i + 1)..]);
             int end = i + 5;
-            if (i == 3 && b.Length > end && b[end] == 0x5D) end++;
+            if (i == 3)
+            {
+                if (b.Length <= end || b[end] != 0x5D) return null;
+                end++;
+            }
             return b.Length > end && b[end] == 0xC3 ? value : null;
         }
         return null;

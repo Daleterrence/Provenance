@@ -87,7 +87,7 @@ public sealed class WindowerAddonList
             if (Already(n, loads.Addons) is { } why) { sendAddons.Remove(n); skipped.Add(why); }
         var fromInit = addons.Where(a => loads.Addons.GetValueOrDefault(a.Listing.Key) == ScriptLoads.InitCommand).Select(a => a.Listing.Key).ToList();
         sendAddons.AddRange(fromInit.Where(n => !sendAddons.Contains(n, StringComparer.OrdinalIgnoreCase)));
-        var pluginsFromInit = plugins.Where(p => p is { Installed: true, IsWindowerPlugin: true, Required: false }
+        var pluginsFromInit = plugins.Where(p => p is { Installed: true, IsWindowerPlugin: true, Required: false, Outdated: false }
                                                  && loads.Plugins.GetValueOrDefault(p.Listing.Key) == ScriptLoads.InitCommand).Select(p => p.Listing.Key).ToList();
         sendPlugins = plugins.Select(p => p.Listing.Key).Where(n => sendPlugins.Contains(n) || pluginsFromInit.Contains(n)).ToList();
         return new WindowerLaunchLists(required, sendPlugins, sendAddons, skipped) { InitCommandAddons = fromInit, InitCommandPlugins = pluginsFromInit };
