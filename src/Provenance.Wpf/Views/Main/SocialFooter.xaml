@@ -6,24 +6,25 @@
              xmlns:social="clr-namespace:Provenance.Wpf.Views.Social">
     <Border Height="44" Style="{StaticResource FooterBar}" Padding="16,0">
         <Grid ColumnDefinitions="Auto,*,Auto">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" IsEnabled="{Binding GameOpen, Converter={StaticResource InvertBool}}">
-                <StackPanel Orientation="Horizontal" Style="{StaticResource DimWhenOff}">
-                    <social:MyProfilePicture x:Name="MyPicture" Diameter="32" Margin="0,0,10,0" DataContext="{Binding Social}"
-                                             ToolTip="Change your profile picture. Right-click to switch handle."
-                                             ContextMenuOpening="OnHandleMenu">
-                        <social:MyProfilePicture.ContextMenu>
-                            <ContextMenu />
-                        </social:MyProfilePicture.ContextMenu>
-                    </social:MyProfilePicture>
-                    <TextBlock Text="{Binding Social.AccountName}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" IsEnabled="{Binding GameOpen, Converter={StaticResource InvertBool}}">
+                    <StackPanel Orientation="Horizontal" Style="{StaticResource DimWhenOff}">
+                        <social:MyProfilePicture x:Name="MyPicture" Diameter="32" Margin="0,0,10,0" DataContext="{Binding Social}"
+                                                 ToolTip="Change your profile picture. Right-click to switch handle."
+                                                 ContextMenuOpening="OnHandleMenu">
+                            <social:MyProfilePicture.ContextMenu>
+                                <ContextMenu />
+                            </social:MyProfilePicture.ContextMenu>
+                        </social:MyProfilePicture>
+                        <TextBlock Text="{Binding Social.AccountName}" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <social:EditProfileButton Margin="4,0,0,0" VerticalAlignment="Center" DataContext="{Binding Social}" />
                 </StackPanel>
-                <social:EditProfileButton Margin="4,0,0,0" VerticalAlignment="Center" DataContext="{Binding Social}" />
                 <ComboBox AutomationProperties.Name="Status" Margin="12,0,0,0" VerticalAlignment="Center" Style="{StaticResource StatusPicker}"
                           IsEnabled="{Binding Social.StatusEditable}" ToolTip="{Binding Social.StatusTip}" ToolTipService.ShowOnDisabled="True"
                           ItemsSource="{Binding Social.StatusItems}" SelectedIndex="{Binding Social.MyStatusIndex}" />
             </StackPanel>
-            <Grid Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center"
-                  Visibility="{Binding GameOpen, Converter={StaticResource InvertBoolToVis}}">
+            <Grid Grid.Column="1" HorizontalAlignment="Left" VerticalAlignment="Center">
                 <ProgressBar Width="14" Height="14" Margin="18,0,0,0"
                              Style="{StaticResource Spinner}"
                              ToolTip="{Binding Social.StatusPendingText}" AutomationProperties.Name="{Binding Social.StatusPendingText}"
