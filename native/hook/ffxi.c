@@ -15,7 +15,7 @@ enum { FX_REQ_NO, FX_REQ_NEW, FX_REQ_DONE, FX_REQ_KEPT };
 
 /* 0x1e and a number colours what follows, even past a wrap. 0x1f and a chat mode's colour stops at the first wrap */
 static const char g_fx_blue[] = "\x1e\x70", g_fx_red[] = "\x1e\x44", g_fx_name[] = "\x1e\x01", g_fx_on[] = "\x1e\x02",
-                  g_fx_off[] = "\x1e\x09", g_fx_note[] = "\x1e\x06";
+                  g_fx_off[] = "\x1e\x09", g_fx_note[] = "\x1e\x06", g_fx_cmd[] = "\x1e\x43";
 static const char g_fx_not_sent[] = "This message was not sent. Please try again.";
 static const char g_fx_no_friend[] = " wasn't found on your friend list, check the spelling and try again.";
 static const char g_fx_no_reply[] = "Nobody has sent you a message yet to reply to.";
@@ -301,6 +301,7 @@ static int fx_print(int icon, const char *colour, const char *a, const char *b, 
     BYTE mode[4] = { 0x12, 0, 0, 0 };
     if (!fx_can_print()) return 0;
     lstrcpynA(line, fx_icon(icon), sizeof line);
+    if (line[0]) fx_append(line, sizeof line, " ");
     fx_append(line, sizeof line, colour);
     fx_append(line, sizeof line, a);
     fx_append(line, sizeof line, b);
@@ -397,8 +398,32 @@ static void fx_count_down(void)
     }
 }
 
-/* a Shift-JIS trail byte is never a space, so names in any language split cleanly */
-static int fx_parse(char *line, char **who, char **text)
+static int fx_friend(BYTE *b, const char *typed, fx_send *s);
+static int fx_req_find(const char *typed, fx_request *out);
+
+/* handles can have spaces, so it's the longest friend or request name the line starts with, else the first word */
+static char *fx_name_end(BYTE *b, int kind, char *p)
+{
+    fx_send s;
+    fx_request r;
+    char *e, *best = NULL, keep;
+    for (e = p; b; e++) {
+        if (*e && *e != ' ') continue;
+        if (e > p && e[-1] != ' ') {
+            keep = *e;
+            *e = 0;
+            if (kind == FX_CMD_M ? fx_friend(b, p, &s) : fx_req_find(p, &r)) best = e;
+            *e = keep;
+        }
+        if (!*e) break;
+    }
+    if (best) return best;
+    for (e = p; *e && *e != ' '; e++) {}
+    return e;
+}
+
+/* a Shift-JIS trail byte is never a space or a quote, so names in any language split cleanly */
+static int fx_parse(BYTE *b, char *line, char **who, char **text)
 {
     char *p = line, *cmd, *e;
     int kind;
@@ -413,8 +438,13 @@ static int fx_parse(char *line, char **who, char **text)
     else if (!lstrcmpiA(cmd, "/fr")) kind = FX_CMD_FR;
     else return FX_CMD_NONE;
     if (kind == FX_CMD_M || kind == FX_CMD_FR) {
-        *who = p;
-        while (*p && *p != ' ') p++;
+        if (*p == '"') {
+            *who = ++p;
+            while (*p && *p != '"') p++;
+        } else {
+            *who = p;
+            p = fx_name_end(b, kind, p);
+        }
         if (*p) *p++ = 0;
         while (*p == ' ') p++;
     }
@@ -716,7 +746,7 @@ static void fx_command(BYTE *b)
     fx_send *s;
     int kind;
     lstrcpynA(line, (const char *)pc_addr_of(g_fx.base, AT_FX_EXPANDED), sizeof line);
-    if ((kind = fx_parse(line, &who, &raw)) == FX_CMD_NONE) return;
+    if ((kind = fx_parse(b, line, &who, &raw)) == FX_CMD_NONE) return;
     if (kind == FX_CMD_FR) {
         if (fx_answers()) fx_answer_command(who, raw);
         return;
@@ -752,7 +782,7 @@ static void fx_command(BYTE *b)
     }
     g_fx.nsends++;
     wsprintfA(name, "[%s%s%s%s] ", fx_is_away(pc_friend_row(b, 0), s->lo, s->hi, s->slot) ? fx_icon(FX_ICON_AWAY) : "", g_fx_name, s->name, g_fx_blue);
-    fx_print(FX_ICON_POL, g_fx_blue, "To", name, s->text);
+    fx_print(FX_ICON_POL, g_fx_blue, "To ", name, s->text);
 }
 
 /* the game's own commands always win, this only sees one it didn't know */
@@ -1393,7 +1423,7 @@ static void fx_friend_lines(void)
             fx_append(text, sizeof text, p->on ? " has come online." : " has gone offline.");
         } else {
             fx_append(text, sizeof text, kind == STARTED ? g_fx_on : g_fx_off);
-            fx_append(text, sizeof text, kind == STARTED ? " is now playing FINAL FANTASY XI." : " is no longer playing FINAL FANTASY XI.");
+            fx_append(text, sizeof text, kind == STARTED ? " is now playing." : " is no longer playing.");
             if (kind == STARTED) fx_playing_as(p, text, sizeof text);
         }
         fx_queue(kind == STARTED ? FX_PLAYING : FX_FRIEND, name, text, NULL, NULL, 0);
@@ -1426,9 +1456,13 @@ static int fx_take(const char *name, const BYTE *hdr)
             fx_append(text, sizeof text, g_fx_name);
             fx_append(text, sizeof text, who);
             fx_append(text, sizeof text, g_fx_note);
-            fx_append(text, sizeof text, ". Respond with /fr ");
+            fx_append(text, sizeof text, ". Respond with ");
+            fx_append(text, sizeof text, g_fx_cmd);
+            fx_append(text, sizeof text, strchr(who, ' ') ? "/fr \"" : "/fr ");
             fx_append(text, sizeof text, who);
-            fx_append(text, sizeof text, " yes/no.");
+            fx_append(text, sizeof text, strchr(who, ' ') ? "\" yes/no" : " yes/no");
+            fx_append(text, sizeof text, g_fx_note);
+            fx_append(text, sizeof text, ".");
         } else {
             lstrcpyA(text, g_fx_name);
             fx_append(text, sizeof text, who);
