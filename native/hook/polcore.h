@@ -143,7 +143,7 @@ static int pc_has(BYTE *b, unsigned off) { return pc_slot(b, off) != NULL; }
 
 #include "polcore_records.h"
 
-#define SV_SJIS_TO_WIDE            0xa38   /* POL's Shift-JIS (EU's Latin extension too) to UTF-16, no bound on src */
+#define SV_SJIS_TO_WIDE            0xa38   /* POL's Shift-JIS (its Latin row 85 too, every region) to UTF-16, no bound on src */
 PC_SVC3(int, pc_sjis_to_wide, SV_SJIS_TO_WIDE, WCHAR *, dst, const char *, src, int, repl)
 #define SV_WIDE_TO_SJIS            0xa40   /* a NULL dst measures, repl goes in for what SJIS hasn't got */
 PC_SVC3(int, pc_wide_to_sjis, SV_WIDE_TO_SJIS, char *, dst, const WCHAR *, src, int, repl)

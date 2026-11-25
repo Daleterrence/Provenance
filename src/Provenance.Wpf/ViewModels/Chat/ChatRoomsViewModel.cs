@@ -424,6 +424,7 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     public ComposeRules ComposeRules => _rules ??= new()
     {
         SingleLine = true,
+        Filter = FilterInput,
         MaxChars = ChatRoomFiles.MaxTextLength,
         MaxBytes = () => ChatRoomFiles.MaxTextBytes(_roomIrc.Length > 0 ? _roomIrc : new string('#', MaxRoomIrc),
                                                     _lastNick ?? new string('W', ChatRoomFiles.MaxNameBytes)),
@@ -431,13 +432,20 @@ public sealed partial class ChatRoomsViewModel : ObservableObject, IDisposable
     private ComposeRules? _rules;
     private const int MaxRoomIrc = 63;
 
+    public string FilterInput(string text)
+    {
+        var kept = PolCharacters.Keep(text, newlines: false, out bool dropped);
+        if (dropped) SendNote = PolCharacters.LeftOut;
+        return kept;
+    }
+
     private bool CanSend => Current == Page.Room && Compose.Trim().Length > 0 && _gate.CanSend
                             && !_social.GameRunning && !_social.HandleSwitching;
 
     [RelayCommand(CanExecute = nameof(CanSend))]
     private void Send()
     {
-        var text = Compose.Trim().Replace("\r", "").Replace('\n', ' ');
+        var text = PolCharacters.Keep(Compose.Trim().Replace("\r", "").Replace('\n', ' '), newlines: false).Trim();
         if (text.Length == 0 || Pid is not { } pid) return;
         var token = HookFiles.NewToken();
         if (!ChatRoomFiles.Send(pid, token, text, Colour, Emoticon)) { SendNote = HookFailures.ChatCommError; return; }

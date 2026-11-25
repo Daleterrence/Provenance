@@ -1,4 +1,5 @@
 using Provenance.Common.Hook;
+using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Social;
 
@@ -11,7 +12,7 @@ public static class SocialRequests
         HookFiles.WriteRequest(pid, HookContract.Requests.Status, PolStatusText.Code(status).ToString());
 
     public static bool Send(int pid, int friendRow, string friendName, string token, string subject, string text) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.Send, friendRow, token, friendName, subject, HookFiles.Body(text));
+        HookFiles.WriteRequest(pid, HookContract.Requests.Send, friendRow, token, friendName, Pol(subject), HookFiles.Body(Pol(text)));
 
     public static bool Ack(int pid, IEnumerable<int> mids)
     {
@@ -54,27 +55,27 @@ public static class SocialRequests
             FriendEdit.Ignore => "ignore",
             _ => "unignore",
         };
-        return HookFiles.WriteRequest(pid, HookContract.Requests.Friend, verb, token, row, key, arg);
+        return HookFiles.WriteRequest(pid, HookContract.Requests.Friend, verb, token, row, key, Pol(arg));
     }
 
     public static bool AnswerRequest(int pid, RequestAnswer answer, string token, int mid, string subject)
     {
         var verb = answer switch { RequestAnswer.Accept => "accept", RequestAnswer.Decline => "decline", _ => "ignore" };
-        return HookFiles.WriteRequest(pid, HookContract.Requests.Answer, verb, token, mid, subject, "");
+        return HookFiles.WriteRequest(pid, HookContract.Requests.Answer, verb, token, mid, Pol(subject), "");
     }
 
     public static bool Search(int pid, string token, FriendSearchKind kind, string value) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Search, token, FriendSearch.Wire(kind),
-                               value.Replace("\r", "").Replace("\n", ""));
+                               Pol(value.Replace("\r", "").Replace("\n", "")));
 
     public static bool SendFriendRequest(int pid, string token, int index, string hitKey, string subject, string text) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.Answer, "request", token, index, subject, text, hitKey);
+        HookFiles.WriteRequest(pid, HookContract.Requests.Answer, "request", token, index, Pol(subject), Pol(text), hitKey);
 
     public static bool RequestProfile(int pid, string token, int friendRow, string friendKey) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Profile, token, friendRow, friendKey);
 
     public static bool CreateGroup(int pid, string token, string name) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.Group, "create", token, "", name, "", "", "");
+        HookFiles.WriteRequest(pid, HookContract.Requests.Group, "create", token, "", Pol(name), "", "", "");
 
     public static bool DisbandGroup(int pid, string token, string groupId) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Group, "disband", token, groupId, "", "", "", "");
@@ -86,16 +87,16 @@ public static class SocialRequests
         HookFiles.WriteRequest(pid, HookContract.Requests.Group, "class", token, groupId, memberIndex, (int)role, "", memberKey);
 
     public static bool SetGroupComment(int pid, string token, string groupId, string text) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.Group, "comment", token, groupId, text, "", "", "");
+        HookFiles.WriteRequest(pid, HookContract.Requests.Group, "comment", token, groupId, Pol(text), "", "", "");
 
     public static bool InviteToGroup(int pid, string token, string groupId, int friendRow, string subject, string text, string friendKey) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.Group, "invite", token, groupId, friendRow, subject, text, friendKey);
+        HookFiles.WriteRequest(pid, HookContract.Requests.Group, "invite", token, groupId, friendRow, Pol(subject), Pol(text), friendKey);
 
     public static bool AnswerGroupInvite(int pid, string token, bool accept, int messageId, string subject) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.Group, accept ? "accept" : "decline", token, "", messageId, subject, "", "");
+        HookFiles.WriteRequest(pid, HookContract.Requests.Group, accept ? "accept" : "decline", token, "", messageId, Pol(subject), "", "");
 
     public static bool SetComment(int pid, string token, string text) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.Comment, token, text);
+        HookFiles.WriteRequest(pid, HookContract.Requests.Comment, token, Pol(text));
 
     public static bool RequestCharacter(int pid, string token, CharacterId id) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Character, token, id.Ctsid, (uint)id.Ctid, (uint)(id.Ctid >> 32));
@@ -112,13 +113,13 @@ public static class SocialRequests
                                      string noMailText = "")
     {
         var lines = new List<object> { token, (int)level };
-        if (noMailText.Length > 0) lines.Add("nomail=" + noMailText);
-        lines.AddRange(fields.Select(f => $"{f.Key}={f.Value}"));
+        if (noMailText.Length > 0) lines.Add("nomail=" + Pol(noMailText));
+        lines.AddRange(fields.Select(f => $"{f.Key}={Pol(f.Value)}"));
         return HookFiles.WriteRequest(pid, HookContract.Requests.SaveProfile, [.. lines]);
     }
 
     public static bool RenameHandle(int pid, string token, string name, string key) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.Rename, token, name, key);
+        HookFiles.WriteRequest(pid, HookContract.Requests.Rename, token, Pol(name), key);
 
     public static string FailReason(string state) =>
         state.StartsWith("failed:", StringComparison.Ordinal) ? state[7..] : state;
@@ -138,7 +139,7 @@ public static class SocialRequests
         HookFiles.WriteRequest(pid, HookContract.Requests.Handle, "link", token, handle.Slot, handle.Key, content.Index, content.Key);
 
     public static bool CreateHandle(int pid, string token, string name) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.Handle, "create", token, name);
+        HookFiles.WriteRequest(pid, HookContract.Requests.Handle, "create", token, Pol(name));
 
     public static bool DeleteHandle(int pid, string token, PolHandle handle) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.Handle, "delete", token, handle.Slot, handle.Key);
@@ -152,4 +153,7 @@ public static class SocialRequests
     }
 
     public static bool SendPending(int pid) => HookFiles.RequestPaths(pid, HookContract.Requests.Send).Any(File.Exists);
+
+    // whatever a box let through, nothing POL can't carry goes past here
+    private static string Pol(string text) => PolCharacters.Sendable(text);
 }

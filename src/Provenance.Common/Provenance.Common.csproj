@@ -6,6 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="PolFormat\PolCharacters.bin" LogicalName="Provenance.Common.PolFormat.PolCharacters.bin" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="provenance-common-tests" />
     <InternalsVisibleTo Include="provenance-wpf-tests" />
     <InternalsVisibleTo Include="provenance-screens" />

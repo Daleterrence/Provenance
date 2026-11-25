@@ -1,4 +1,5 @@
 using Provenance.Common.Hook;
+using Provenance.Common.PolFormat;
 
 namespace Provenance.Common.Social;
 
@@ -38,6 +39,8 @@ public sealed class MailSendQueue
 
     public bool Add(ChatStore chat, int row, string name, string key, string text, int? pid, bool blocked)
     {
+        text = PolCharacters.Keep(text, newlines: true);
+        if (string.IsNullOrWhiteSpace(text)) return false;
         var token = HookFiles.NewToken();
         chat.AddOutgoing(name, key, text, token);
         _queue.Enqueue((row, name, token, text));

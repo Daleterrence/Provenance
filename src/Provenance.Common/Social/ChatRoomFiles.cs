@@ -35,15 +35,15 @@ public static class ChatRoomFiles
         HookFiles.WriteRequest(pid, HookContract.Requests.ChatRooms, token, zone, offset);
 
     public static bool Join(int pid, string token, string irc, bool hasPassword, string chatName) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.ChatJoin, token, irc, hasPassword ? "1" : "", chatName);
+        HookFiles.WriteRequest(pid, HookContract.Requests.ChatJoin, token, irc, hasPassword ? "1" : "", PolCharacters.Sendable(chatName));
 
     public static bool Send(int pid, string token, string text, int colour = -1, int emote = 0) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.ChatSend, token, text, colour, emote);
+        HookFiles.WriteRequest(pid, HookContract.Requests.ChatSend, token, PolCharacters.Sendable(text), colour, emote);
 
     public static bool Create(int pid, string token, bool hasPassword, int zone, int occupancy, int members, int purpose,
                               int language, string chatName, string roomName) =>
         HookFiles.WriteRequest(pid, HookContract.Requests.ChatCreate, token, hasPassword ? "1" : "", zone, occupancy, members,
-                               purpose, language, chatName, roomName);
+                               purpose, language, PolCharacters.Sendable(chatName), PolCharacters.Sendable(roomName));
 
     public enum MasterOp { Kick, Master, Password }
 
@@ -57,14 +57,14 @@ public static class ChatRoomFiles
 
     public static string? NameProblem(string name) =>
         string.IsNullOrWhiteSpace(name) ? "Enter chat name."
-        : name.Any(c => c < ' ') ? "That chat name can't be used."
-        : ShiftJis.ByteCount(name) > MaxNameBytes ? "Chat names can be up to 15 characters (Japanese characters count as two)."
+        : !PolCharacters.All(name) ? "That chat name can't be used."
+        : ShiftJis.ByteCount(PolCharacters.FullWidth(name)) > MaxNameBytes ? "Chat names can be up to 15 characters (Japanese characters count as two)."
         : null;
 
     public static string? RoomNameProblem(string name) =>
         string.IsNullOrWhiteSpace(name) ? "Room name is not set. Cannot create room."
         : name.Length > MaxRoomName ? "Room names can be up to 30 characters."
-        : name.Any(c => c < ' ') || !ShiftJis.Fits(name) ? HookFailures.ChatRooms.BadName
+        : !PolCharacters.All(name) ? HookFailures.ChatRooms.BadName
         : null;
 
     public static string? NewPasswordProblem(string password) =>

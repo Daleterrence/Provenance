@@ -297,7 +297,8 @@ public sealed partial class GroupsViewModel : ObservableObject
 
     // the viewer counts the name in Shift-JIS bytes, a Japanese character's two
     public static string? NameProblem(string name) =>
-        ShiftJis.ByteCount(name.Trim()) > PolLimits.GroupName ? "Group names can be up to 20 English letters, or 10 Japanese characters." : null;
+        !PolCharacters.All(name) ? PolCharacters.CantSend
+        : ShiftJis.ByteCount(PolCharacters.FullWidth(name.Trim())) > PolLimits.GroupName ? "Group names can be up to 20 English letters, or 10 Japanese characters." : null;
 
     public GroupItem? GroupOf(GroupMemberItem m) => Items.FirstOrDefault(g => g.Members.Any(x => ReferenceEquals(x, m)));
 
@@ -323,7 +324,7 @@ public sealed partial class GroupsViewModel : ObservableObject
         {
             var mine = g.Members.FirstOrDefault(m => m.Me)?.Comment ?? "";
             var text = _social.Dialogs.Ask("Group comment", $"Your comment in \"{g.Name}\" (up to 49 characters).", mine,
-                                    maxLength: PolLimits.Comment, allowEmpty: true);
+                                    maxLength: PolLimits.Comment, allowEmpty: true, validate: t => PolCharacters.All(t) ? null : PolCharacters.CantSend);
             if (text != null && text != mine) SetComment(g, text);
         }));
         if (g.CanInvite)

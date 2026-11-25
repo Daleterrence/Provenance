@@ -278,7 +278,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanSend))]
     private void Send()
     {
-        var text = ShiftJis.Filter(Compose.Trim().Replace("\r", "").Replace('\n', ' '), out _);
+        var text = PolCharacters.Keep(Compose.Trim().Replace("\r", "").Replace('\n', ' '), newlines: false).Trim();
         if (text.Length == 0 || _social.Session.Pid is not { } pid) return;
         if (text.Length > GroupChatFiles.MaxText) text = text[..GroupChatFiles.MaxText];
         var token = HookFiles.NewToken();
@@ -300,7 +300,7 @@ public sealed partial class GroupChatViewModel : ObservableObject
 
     public string FilterInput(string text)
     {
-        var kept = ShiftJis.Filter(text, out bool dropped);
+        var kept = PolCharacters.Keep(text, newlines: false, out bool dropped);
         if (dropped) ComposeNote = FilteredNote;
         return kept;
     }

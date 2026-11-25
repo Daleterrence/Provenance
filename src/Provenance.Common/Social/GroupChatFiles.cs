@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Provenance.Common.Hook;
+using Provenance.Common.PolFormat;
 using static Provenance.Common.JsonFields;
 
 namespace Provenance.Common.Social;
@@ -31,7 +32,7 @@ public static class GroupChatFiles
         HookFiles.WriteRequest(pid, HookContract.Requests.GroupChatJoin, token, group, slot, hid);
 
     public static bool Send(int pid, string token, string text) =>
-        HookFiles.WriteRequest(pid, HookContract.Requests.GroupChatSend, token, text);
+        HookFiles.WriteRequest(pid, HookContract.Requests.GroupChatSend, token, PolCharacters.Sendable(text));
 
     public static bool Leave(int pid, string token, string join = "") =>
         HookFiles.WriteRequest(pid, HookContract.Requests.GroupChatLeave, token, join);

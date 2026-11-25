@@ -16,6 +16,7 @@ public sealed partial class SocialMessages : ObservableObject
     private string? _listedFor;
     private string? _draftFor;
     private FriendItem? _draftPerson;
+    private bool _leftOut;
 
     public SocialMessages(SocialViewModel social, Func<FriendItem?> friend)
     {
@@ -33,7 +34,27 @@ public sealed partial class SocialMessages : ObservableObject
     [NotifyPropertyChangedFor(nameof(ComposeBytes), nameof(ComposeCount), nameof(ComposeCountShown), nameof(ComposeNote))]
     private string _compose = "";
 
-    public ComposeRules ComposeRules { get; } = new() { MaxBytes = () => PolMessage.MaxTextBytes };
+    public ComposeRules ComposeRules => _rules ??= new() { MaxBytes = () => PolMessage.MaxTextBytes, Filter = FilterInput };
+    private ComposeRules? _rules;
+
+    public string FilterInput(string text)
+    {
+        var kept = PolCharacters.Keep(text, newlines: true, out bool dropped);
+        if (dropped && !_leftOut)
+        {
+            _leftOut = true;
+            OnPropertyChanged(nameof(ComposeNote));
+        }
+        return kept;
+    }
+
+    partial void OnComposeChanged(string value)
+    {
+        if (value.Length > 0 || !_leftOut) return;
+        _leftOut = false;
+        OnPropertyChanged(nameof(ComposeNote));
+    }
+
     public int ComposeBytes => ShiftJis.ByteCount(Compose.Trim());
     public string ComposeCount => $"{ComposeBytes}/{PolMessage.MaxTextBytes}";
     public bool ComposeCountShown => ComposeBytes >= PolMessage.MaxTextBytes * 9 / 10;
@@ -49,6 +70,7 @@ public sealed partial class SocialMessages : ObservableObject
     {
         null => "",
         _ when _social.SendBlockedNote is { } blocked => blocked,
+        { CanMessage: true } when _leftOut => PolCharacters.LeftOut,
         { CanMessage: true } when ComposeCountShown && ComposeHasWide =>
             ShiftJis.HasDoubleByte(Compose) ? "Japanese characters count as two." : "Some characters count as two.",
         { CanMessage: true, Online: true } => "This sends a PlayOnline message.",
@@ -112,6 +134,7 @@ public sealed partial class SocialMessages : ObservableObject
 
     internal void SelectionChanged(FriendItem? value)
     {
+        _leftOut = false;
         OnPropertyChanged(nameof(Friend));
         OnPropertyChanged(nameof(ComposeNote));
         var key = value is null ? null : DraftKey(value);
