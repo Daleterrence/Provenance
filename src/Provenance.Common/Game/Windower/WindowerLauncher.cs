@@ -102,12 +102,14 @@ public sealed class WindowerLauncher : IDisposable
         WindowerBackgroundUpdates.Shared.Stop(wait);
     }
 
-    public static void CheckAtOpen(ISettingsService settings)
+    public static void CheckAtOpen(ISettingsService settings) => CheckAtOpen(settings, settings.Current.ThirdPartyHookPlatform);
+
+    public static void CheckAtOpen(ISettingsService settings, ThirdPartyHook platform)
     {
         try
         {
             var s = settings.Current;
-            if (s.ThirdPartyHookPlatform != ThirdPartyHook.Windower) return;
+            if (platform != ThirdPartyHook.Windower) return;
             var path = ThirdPartyHooks.Usable(s.WindowerPath);
             var begun = WindowerChecks.Shared.Starting();
             _ = Task.Run(() =>

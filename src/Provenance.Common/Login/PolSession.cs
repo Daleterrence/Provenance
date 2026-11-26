@@ -87,7 +87,16 @@ public sealed partial class PolSession : IDisposable
 
     public ThirdPartyHook Platform => _settings.Current.ThirdPartyHookPlatform;
 
-    internal ThirdPartyHook PlatformFor(SessionOptions options) => options.Plain ? ThirdPartyHook.None : Platform;
+    internal ThirdPartyHook PlatformFor(SessionOptions options) => options.Plain ? ThirdPartyHook.None : options.Platform ?? Platform;
+
+    private (ThirdPartyHook Platform, string? HookProfile)? _launched;
+
+    public ThirdPartyHook SessionPlatform => _launched?.Platform ?? Platform;
+
+    public string? SessionHookProfile => _launched?.HookProfile;
+
+    internal void NoteLaunch(SessionOptions options) =>
+        _launched = options.Platform is null && options.ThirdPartyHookProfile is null ? null : (PlatformFor(options), options.ThirdPartyHookProfile);
 
     public async Task<int> ConnectAsync(LoginRequest request, CancellationToken ct = default)
     {
@@ -95,7 +104,9 @@ public sealed partial class PolSession : IDisposable
         if (Volatile.Read(ref _played))
             throw Shown.Mark(new InvalidOperationException("Provenance is still finishing your last game. Close Provenance and open it again, then log in."));
         LastRefusalReason = null;
-        var launch = request with { Options = ForLaunch(request.Options, request.ProfileId) };
+        var options = ForLaunch(request.Options, request.ProfileId);
+        NoteLaunch(options);
+        var launch = request with { Options = options };
         int rc = LoginCodes.LauncherFailed;
         try
         {

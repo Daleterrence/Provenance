@@ -16,15 +16,15 @@ public static class GameBackupPolicy
 
     public const string WorkingText = "Backing up your game settings...";
 
-    public static BackupSources? SourcesFor(LauncherSettings s, PolRegion region, string? accountBoot) =>
+    public static BackupSources? SourcesFor(LauncherSettings s, PolRegion region, string? accountBoot, ThirdPartyHook? platform = null) =>
         PolPaths.TryGetInstallFolder(region, GameProduct.Game) is { } ffxi
-            ? GameSettingsBackup.Sources(ffxi, SettingsFolder(s, new RegistryGameStore(region), accountBoot))
+            ? GameSettingsBackup.Sources(ffxi, SettingsFolder(s, new RegistryGameStore(region), accountBoot, platform))
             : null;
 
-    internal static string SettingsFolder(LauncherSettings s, RegistryGameStore registry, string? accountBoot)
+    internal static string SettingsFolder(LauncherSettings s, RegistryGameStore registry, string? accountBoot, ThirdPartyHook? platform = null)
     {
         var windows = registry.LoadWindows().ScreenshotFolder;
-        if (s.ThirdPartyHookPlatform != ThirdPartyHook.Ashita) return windows;
+        if ((platform ?? s.ThirdPartyHookPlatform) != ThirdPartyHook.Ashita) return windows;
         var play = PlayTarget.For(s, accountBoot, ThirdPartyHook.Ashita);
         var (dir, boot) = (play.Dir, play.Profile);
         if (dir is null || boot.Length == 0 || !AshitaBootFiles.IsBootFileName(boot)) return windows;

@@ -55,7 +55,7 @@ public sealed partial class PolSession
             HookEnvironment.SetPrestart(psi.Environment, loginComing: true);
             var options = request.Options;
             var launchId = LaunchId!;
-            bool ashita = owner.Platform == ThirdPartyHook.Ashita;
+            bool ashita = owner.PlatformFor(request.Options) == ThirdPartyHook.Ashita;
             EarlyStart.Chain chain = owner.EarlyChain ?? (ashita
                 ? (progress, token, hookStarted) => AshitaLauncher.StartViaAshita(owner._settings, owner._watcher, psi, polExe, launchId,
                                                                                   options.ThirdPartyHookProfile, progress, token, hookStarted,
@@ -106,7 +106,7 @@ public sealed partial class PolSession
                 End();
                 if (_restarted)
                 {
-                    progress?.Report(LaunchProgress.Failed(owner.Platform == ThirdPartyHook.Ashita ? Watcher.PolDidNotStart : Watcher.WindowerDidNotStart));
+                    progress?.Report(LaunchProgress.Failed(owner.PlatformFor(request.Options) == ThirdPartyHook.Ashita ? Watcher.PolDidNotStart : Watcher.WindowerDidNotStart));
                     return null;
                 }
                 _restarted = true;

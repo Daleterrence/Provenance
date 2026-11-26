@@ -22,7 +22,7 @@ public sealed record ClaimResult(string? Otp, string? InUse, bool OtpCancelled)
 
 public sealed record LaunchLogin(Account Account, PolAccount Pol, SquareEnixAccount SquareEnix, string Otp, int HomeSlot, bool Lean,
                                  string? ThirdPartyHookProfile, IProgress<LaunchProgress>? Progress, Func<string?>? AskHandleName,
-                                 Func<bool>? BeforePol = null, bool Plain = false)
+                                 Func<bool>? BeforePol = null, bool Plain = false, ThirdPartyHook? Platform = null)
 {
     private bool PrintMembers(System.Text.StringBuilder builder)
     {
@@ -80,16 +80,18 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
 
     public async Task<LogInResult> LogInAsync(LaunchLogin l, CancellationToken ct)
     {
-        int code = LogInSeam is { } seam ? await seam(l, ct) : await pol.ConnectAsync(new LoginRequest(l.Pol, l.SquareEnix, l.Otp)
-        {
-            ProfileId = l.Account.Id,
-            Progress = l.Progress,
-            AskHandleName = l.AskHandleName,
-            BeforePol = l.BeforePol,
-            Options = new SessionOptions(l.Lean, l.ThirdPartyHookProfile, l.HomeSlot, HandleKey: l.Account.HandleKey, Plain: l.Plain),
-        }, ct);
+        int code = LogInSeam is { } seam ? await seam(l, ct) : await pol.ConnectAsync(RequestFor(l), ct);
         return new(code, pol.LastRefusalReason);
     }
+
+    internal static LoginRequest RequestFor(LaunchLogin l) => new(l.Pol, l.SquareEnix, l.Otp)
+    {
+        ProfileId = l.Account.Id,
+        Progress = l.Progress,
+        AskHandleName = l.AskHandleName,
+        BeforePol = l.BeforePol,
+        Options = new SessionOptions(l.Lean, l.ThirdPartyHookProfile, l.HomeSlot, HandleKey: l.Account.HandleKey, Plain: l.Plain, Platform: l.Platform),
+    };
 
     public (string Ffxi, string Viewer, PolRegion Region)? GameFolders() =>
         FolderSeam is { } seam ? seam()
@@ -122,7 +124,7 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
     public async Task<string?> FinishWindowerUpdateAsync(Action<string>? saying, CancellationToken ct = default)
     {
         if (FinishWindowerUpdateSeam is { } seam) return await seam(saying, ct);
-        if (pol.Platform != ThirdPartyHook.Windower || pol.Windower.Update is not { } update) return null;
+        if (pol.SessionPlatform != ThirdPartyHook.Windower || pol.Windower.Update is not { } update) return null;
         if (!update.Finished)
         {
             saying?.Invoke(WindowerLauncher.FinishingUpdateText);
@@ -187,7 +189,9 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
         if (!s.BackupGameSettings) return null;
         saying?.Invoke(GameBackupPolicy.WorkingText);
         var region = settings.RegionOrDefault;
-        var pick = sources ?? ((cfg, boot) => GameBackupPolicy.SourcesFor(cfg, region, boot));
+        var platform = pol.SessionPlatform;
+        accountBoot ??= pol.SessionHookProfile;
+        var pick = sources ?? ((cfg, boot) => GameBackupPolicy.SourcesFor(cfg, region, boot, platform));
         return await Task.Run(() => GameBackupPolicy.BeforePlay(s, () => pick(s, accountBoot)));
     }
 

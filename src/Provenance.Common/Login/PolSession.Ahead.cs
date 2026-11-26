@@ -70,7 +70,7 @@ public sealed partial class PolSession
     {
         if (Volatile.Read(ref _played) || Pid is not null) return;
         var launch = ForLaunch(options, profileId);
-        var platform = Platform;
+        var platform = PlatformFor(launch);
         AheadLogin? replaced = null;
         lock (_aheadGate)
         {
