@@ -405,9 +405,13 @@ public partial class MainViewModel : ObservableObject
     }
 
     internal async Task<int> ConnectProfileAsync(Account p, PolAccount pol, SquareEnixAccount squareEnix, string otp,
-                                                 IProgress<LaunchProgress>? progress, CancellationToken token, Func<bool>? stillLean = null) =>
-        (await _launch.LogInAsync(new LaunchLogin(p, pol, squareEnix, otp, Accounts.EnsureHomeSlot(p), stillLean is not null, null, progress,
-                                                  PromptHandleName, stillLean), token)).Code;
+                                                 IProgress<LaunchProgress>? progress, CancellationToken token, Func<bool>? stillLean = null,
+                                                 CommandLineTarget? commandLine = null)
+    {
+        var mine = commandLine is { } c && c.Account.Id == p.Id ? c : null;
+        return (await _launch.LogInAsync(new LaunchLogin(p, pol, squareEnix, otp, Accounts.EnsureHomeSlot(p), stillLean is not null, mine?.Profile,
+                                                         progress, PromptHandleName, stillLean, Platform: mine?.Platform), token)).Code;
+    }
 
     private readonly AccountCheck _accountCheck;
     private readonly RefusedPasswords _refused;
@@ -608,12 +612,42 @@ public partial class MainViewModel : ObservableObject
 
     private bool StartsAllAtOpen(bool suppressed) => !ShowSetupCard && MultiAccountRules.StartsAtOpen(_settings.Current, suppressed);
 
-    internal bool StartsLean(bool suppressed) =>
-        !StartsAllAtOpen(suppressed) && LogsInAtStart(suppressed) && Accounts.SelectedProfile is not null && !ShowSetupCard && Lean.Wanted;
+    internal bool StartsLean(bool suppressed) => CommandLine is not null
+        ? CommandLineProblem() is null && Lean.Ready
+        : !StartsAllAtOpen(suppressed) && LogsInAtStart(suppressed) && Accounts.SelectedProfile is not null && !ShowSetupCard && Lean.Wanted;
+
+    public const string CommandLineTitle = "Provenance";
+    public const string CommandLineNotInstalled = "FINAL FANTASY XI isn't installed yet. Open Provenance to install it.";
+    public const string CommandLineSetupFirst = "Provenance needs setting up first. Open it and finish the setup, then try again.";
+
+    public CommandLineTarget? CommandLine { get; set; }
+
+    internal string? CommandLineProblem() => !GameInstalled ? CommandLineNotInstalled : ShowSetupCard ? CommandLineSetupFirst : null;
+
+    internal void StartFromCommandLine()
+    {
+        _launch.DropAhead();
+        if (CommandLine is not { } target) return;
+        if (CommandLineProblem() is { } problem)
+        {
+            CommandLine = null;
+            _dialogs.Error(CommandLineTitle, problem);
+            RaiseExit();
+            return;
+        }
+        Log.Information("Logging in to {Account} from the command line", target.Account.Id);
+        Accounts.SelectForLaunch(target.Account);
+        LogInCommand.Execute(null);
+    }
 
     public void Startup(bool autoLoginSuppressed)
     {
         _pol.Records.EndOrphans();
+        if (CommandLine is not null)
+        {
+            StartFromCommandLine();
+            return;
+        }
         _pol.Prestarter.Prestart();
         if (StartsAllAtOpen(autoLoginSuppressed))
         {
@@ -785,10 +819,12 @@ public partial class MainViewModel : ObservableObject
     private async Task ConnectSocialAsync()
     {
         Log.Information("Log in pressed");
+        var commandLine = CommandLine;
+        CommandLine = null;
         if (Accounts.SelectedProfile == null && !Accounts.TryAddAccount(check: false)) { _launch.DropAhead(); return; }
         if (ShowSetupCard) { _launch.DropAhead(); return; }
         if (Accounts.SelectedProfile is not { } profile) { _launch.DropAhead(); return; }
-        bool lean = Lean.Open();
+        bool lean = Lean.Open(force: commandLine is not null);
         (PolAccount Pol, SquareEnixAccount SquareEnix, string Otp)? details = null;
         try { details = LogInDetails(profile); }
         finally
@@ -816,7 +852,7 @@ public partial class MainViewModel : ObservableObject
         });
         try
         {
-            int code = await ConnectProfileAsync(profile, pol, squareEnix, otp, progress, token, Lean.BeforePol(profile.Id, token));
+            int code = await ConnectProfileAsync(profile, pol, squareEnix, otp, progress, token, Lean.BeforePol(profile.Id, token), commandLine);
             NoteLogin(pol.PolId, code);
             await _ui.Flush();   // queued progress reports have to land first (yes, really)
             if (code == 0 && Lean.Running) (code, lastFailure, gameRan) = await Lean.AfterLogInAsync(profile.Id, token);

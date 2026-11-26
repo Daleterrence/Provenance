@@ -50,12 +50,12 @@ public partial class App : Application
         if (SkipStartup) return;
         base.OnStartup(e);
         var args = new LaunchArgs(e.Args);
-        bool shiftAtStart = ShiftDown() || args.ShiftHeld;
+        bool shiftAtStart = ShiftAtStart(args, ShiftDown);
         CatchUnhandled();
         Log.Information("Provenance starting");
         AppTheme.Apply(AppTheme.FromSettingsFile(SettingsService.DefaultPath));
 
-        if (!args.AfterUpdate && TrayCopy.ReuseRunning())
+        if (ReusesTrayCopy(args) && TrayCopy.ReuseRunning())
         {
             Shutdown(0);
             return;
@@ -80,22 +80,45 @@ public partial class App : Application
             return;
         }
 
+        CommandLineTarget? commandLine = null;
+        if (args.FromCommandLine)
+        {
+            string? problem = args.Problem;
+            if (args.Play is { } play) commandLine = CommandLineLaunch.Resolve(settings.Current, play, out problem);
+            if (commandLine is null)
+            {
+                Log.Information("Started from the command line, but it couldn't be used");
+                StartupErrors.Show(MainViewModel.CommandLineTitle, problem ?? "", offerLogs: false);
+                Shutdown(1);
+                return;
+            }
+        }
+
         WarmKeys();
         MirrorCheck.StartAtOpen(settings);
-        WindowerLauncher.CheckAtOpen(settings);
-        bool shift = AutoLoginAtOpen.ShiftAtStart(shiftAtStart, ShiftDown, settings);
-        var autoLogin = AutoLoginAtOpen.Coming(settings, credentials, shift || args.NoAutoLogin);
-        StartPolEarly(() => ScreenSaver.Note(settings), pol.Records.EndOrphans, () => pol.Prestarter.StartEarly(loginComing: autoLogin is not null));
-        AutoLoginAtOpen.StartAhead(pol, autoLogin);
-
-        shift = AutoLoginAtOpen.ShiftLater(shift, ShiftDown, settings);
-        bool noAutoLogin = shift || args.NoAutoLogin;
-        var mainVm = ShowMainWindow(credentials, settings, pol, noAutoLogin);
+        WindowerLauncher.CheckAtOpen(settings, commandLine?.Platform ?? settings.Current.ThirdPartyHookPlatform);
+        bool noAutoLogin = true;
+        if (commandLine is null)
+        {
+            bool shift = AutoLoginAtOpen.ShiftAtStart(shiftAtStart, ShiftDown, settings);
+            var autoLogin = AutoLoginAtOpen.Coming(settings, credentials, shift || args.NoAutoLogin);
+            StartPolEarly(() => ScreenSaver.Note(settings), pol.Records.EndOrphans, () => pol.Prestarter.StartEarly(loginComing: autoLogin is not null));
+            AutoLoginAtOpen.StartAhead(pol, autoLogin);
+            shift = AutoLoginAtOpen.ShiftLater(shift, ShiftDown, settings);
+            noAutoLogin = shift || args.NoAutoLogin;
+        }
+        else StartPolEarly(() => ScreenSaver.Note(settings), pol.Records.EndOrphans, () => { });
+        var mainVm = ShowMainWindow(credentials, settings, pol, noAutoLogin, commandLine);
         _ = SelfUpdate.TellIfUpdateWaiting(mainVm.UpdateNotice);
         SelfUpdate.TellIfHeldBack(args, mainVm.Notice);
         StartMainViewModel(mainVm, noAutoLogin);
         _ = Dispatcher.InvokeAsync(() => LogsNotice.Tell(WpfDialogs.Default, Program.LogsProblem));
     }
+
+    internal static bool ReusesTrayCopy(LaunchArgs args) => !args.AfterUpdate && !args.FromCommandLine;
+
+    // another program starting Provenance may well have Shift down, and Shift would switch Log In Automatically off
+    internal static bool ShiftAtStart(LaunchArgs args, Func<bool> shiftDown) => !args.FromCommandLine && (shiftDown() || args.ShiftHeld);
 
     internal static void StartPolEarly(Action noteScreenSaver, Action endOrphans, Action startPol)
     {
@@ -210,7 +233,8 @@ public partial class App : Application
         AppDomain.CurrentDomain.ProcessExit += (_, _) => Log.Information("Process exit");
     }
 
-    private MainViewModel ShowMainWindow(CredentialService credentials, SettingsService settings, PolSession pol, bool noAutoLogin)
+    private MainViewModel ShowMainWindow(CredentialService credentials, SettingsService settings, PolSession pol, bool noAutoLogin,
+                                         CommandLineTarget? commandLine)
     {
         ShutdownMode = ShutdownMode.OnMainWindowClose;
         var timer = new StepTimer("Main window");
@@ -224,6 +248,7 @@ public partial class App : Application
         {
             if (LogOff(mainVm, mainWindow)) e.Cancel = true;
         };
+        mainVm.CommandLine = commandLine;
         mainWindow.DataContext = mainVm;
         MainWindow = mainWindow;
         _started = true;

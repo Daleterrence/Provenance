@@ -35,7 +35,9 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
     private PolSocialSnapshot? _held;
     private Func<Task>? _next;
 
-    internal bool Wanted => accounts.StartGameImmediately && links.GameInstalled() && launch.GameFolders() is not null;
+    internal bool Wanted => accounts.StartGameImmediately && Ready;
+
+    internal bool Ready => links.GameInstalled() && launch.GameFolders() is not null;
 
     internal bool Running => _lean;
 
@@ -45,13 +47,13 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
 
     internal bool TipShown { get; set; }
 
-    internal bool Open()
+    internal bool Open(bool force = false)
     {
         _madeHandle = false;
         _check = null;
         _held = null;
         _next = null;
-        _lean = _shown = Wanted;
+        _lean = _shown = force ? Ready : Wanted;
         TipShown = _shown && AtOpen;
         if (!_shown) return false;
         if (main.Notice.Current is { Stays: false }) main.Notice.Take();

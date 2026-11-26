@@ -1,3 +1,5 @@
+using Provenance.Common.Login;
+
 namespace Provenance.Wpf;
 
 public sealed class LaunchArgs
@@ -15,6 +17,9 @@ public sealed class LaunchArgs
     public bool AfterUpdate { get; }
     public bool ShiftHeld { get; }
     public bool UpdateHeld { get; }
+    public PlayRequest? Play { get; }
+    public string? Problem { get; }
+    public bool FromCommandLine => Play is not null || Problem is not null;
 
     public LaunchArgs(string[] args)
     {
@@ -24,6 +29,8 @@ public sealed class LaunchArgs
         AfterUpdate = Has(AfterUpdateSwitch);
         ShiftHeld = Has(ShiftHeldSwitch);
         UpdateHeld = Has(UpdateHeldSwitch);
+        Play = CommandLine.Parse(args, out var problem);
+        Problem = problem;
     }
 
     public string[] ForRestart(bool shiftHeld)

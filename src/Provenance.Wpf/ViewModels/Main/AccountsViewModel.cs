@@ -186,10 +186,20 @@ public partial class AccountsViewModel : ObservableObject
         else { var i = Profiles.IndexOf(prof); if (i >= 0) Profiles[i] = prof; }
     }
 
+    private bool _launchOnly;
+
+    // a command-line login mustn't change which account a normal start logs in
+    internal void SelectForLaunch(Account account)
+    {
+        _launchOnly = true;
+        try { SelectedProfile = account; }
+        finally { _launchOnly = false; }
+    }
+
     partial void OnSelectedProfileChanged(Account? value)
     {
         if (value == null) return;
-        _settings.SaveChange(s => s.ActiveProfileId = value.Id);
+        if (!_launchOnly) _settings.SaveChange(s => s.ActiveProfileId = value.Id);
         LoadCredentialsForProfile(value);
     }
 
