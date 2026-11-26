@@ -60,7 +60,7 @@ public sealed partial class AutoLoginSettings : ObservableObject
             var row = new AutoLoginRow
             {
                 ProfileId = p.Id,
-                Name = string.IsNullOrWhiteSpace(p.HandleName) ? p.DisplayName : p.HandleName!,
+                Name = AccountNames.Of(s.Profiles, p),
                 Choices = picks.Select(c => c.Text).ToList(),
                 Picks = picks,
                 HasCharacters = p.Characters.Count > 0,

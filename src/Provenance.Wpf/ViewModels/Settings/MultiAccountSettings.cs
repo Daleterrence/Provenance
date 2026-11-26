@@ -73,7 +73,7 @@ public partial class MultiAccountSettings : ObservableObject
             var row = new MultiAccountRow
             {
                 ProfileId = id,
-                Name = string.IsNullOrWhiteSpace(p.HandleName) ? p.DisplayName : p.HandleName!,
+                Name = AccountNames.Of(s.Profiles, p),
                 Enabled = entry?.Enabled ?? false,
                 Problem = entry?.Problem,
                 CredentialsRefused = entry?.CredentialsRefused ?? false,

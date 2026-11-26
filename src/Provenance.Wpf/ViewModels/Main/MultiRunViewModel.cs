@@ -121,7 +121,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         var entries = MultiEntries();
         if (entries.Count == 0) return;
         var accounts = entries.Select(e => _accounts.Profiles.First(p => p.Id == e.ProfileId))
-                              .Select(p => new MultiRunAccount(p.Id, string.IsNullOrWhiteSpace(p.HandleName) ? p.DisplayName : p.HandleName!))
+                              .Select(p => new MultiRunAccount(p.Id, _accounts.NameOf(p)))
                               .ToList();
         if (MultiAccountRules.WithoutProfile(entries) is { Count: > 0 } unpicked)
         {

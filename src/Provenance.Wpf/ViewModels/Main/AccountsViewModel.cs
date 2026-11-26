@@ -50,9 +50,38 @@ public partial class AccountsViewModel : ObservableObject
         if (active != null) LoadCredentialsForProfile(active);
         _startGameImmediately = _settings.Current.StartGameImmediately;
         Profiles.CollectionChanged += (_, _) => OnPropertyChanged(nameof(CanOrder));
+        Picks = new(Profiles.Select(p => new AccountPick(p, NameOf(p))));
+        Profiles.CollectionChanged += OnPicksChanged;
     }
 
     public ObservableCollection<Account> Profiles { get; }
+
+    public ObservableCollection<AccountPick> Picks { get; }
+
+    private void OnPicksChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add:
+                Picks.Insert(e.NewStartingIndex, new AccountPick((Account)e.NewItems![0]!, ""));
+                break;
+            case NotifyCollectionChangedAction.Remove:
+                Picks.RemoveAt(e.OldStartingIndex);
+                break;
+            case NotifyCollectionChangedAction.Move:
+                Picks.Move(e.OldStartingIndex, e.NewStartingIndex);
+                break;
+            case NotifyCollectionChangedAction.Replace:
+                var account = (Account)e.NewItems![0]!;
+                if (Picks[e.NewStartingIndex].Account != account) Picks[e.NewStartingIndex] = new AccountPick(account, "");
+                break;
+            default:
+                Picks.Clear();
+                foreach (var p in Profiles) Picks.Add(new AccountPick(p, ""));
+                break;
+        }
+        foreach (var pick in Picks) pick.Name = NameOf(pick.Account);
+    }
 
     internal static Account? ProfileAtStart(LauncherSettings s) =>
         s.Profiles.FirstOrDefault(p => p.Id == s.ActiveProfileId) ?? s.Profiles.FirstOrDefault();
@@ -74,7 +103,18 @@ public partial class AccountsViewModel : ObservableObject
         }
     }
 
-    private AccountRow RowOf(Account p) => new(p, p.DisplayName, _avatars.ProfilePicture(p.ProfilePictureId));
+    internal string NameOf(Account p) => AccountNames.Of(Profiles, p);
+
+    private AccountRow RowOf(Account p) => new(p, NameOf(p), _avatars.ProfilePicture(p.ProfilePictureId));
+
+    // one account added, removed or moved can change another's number
+    private void RenameRows()
+    {
+        var rows = _rows!;
+        for (int i = 0; i < rows.Count; i++)
+            if (NameOf(rows[i].Account) is var name && name != rows[i].Name) rows[i] = rows[i] with { Name = name };
+        OnPropertyChanged(nameof(ProfileTitle));
+    }
 
     private void OnProfilesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -99,6 +139,7 @@ public partial class AccountsViewModel : ObservableObject
                 foreach (var p in Profiles) rows.Add(RowOf(p));
                 break;
         }
+        RenameRows();
     }
 
     public bool CanOrder => Profiles.Count > 1;
@@ -118,7 +159,7 @@ public partial class AccountsViewModel : ObservableObject
 
     public bool HasProfile => SelectedProfile != null;
 
-    public string ProfileTitle => SelectedProfile?.DisplayName ?? string.Empty;
+    public string ProfileTitle => SelectedProfile is { } p ? NameOf(p) : string.Empty;
 
     public System.Windows.Media.ImageSource? ProfilePicture =>
         _avatars.ProfilePicture(SelectedProfile?.ProfilePictureId ?? 0);
@@ -231,7 +272,7 @@ public partial class AccountsViewModel : ObservableObject
         if (ProfileWithPolId(r.PolId) is { } same)
         {
             _dialogs.Info("Account already added",
-                $"This PlayOnline ID is already saved as {same.DisplayName}. Press Edit next to it if you want to change its details.");
+                $"This PlayOnline ID is already saved as {NameOf(same)}. Press Edit next to it if you want to change its details.");
             SelectedProfile = same;
             return false;
         }
@@ -260,14 +301,14 @@ public partial class AccountsViewModel : ObservableObject
         if (p is null) return false;
         requireAll |= AccountRules.NeedsAllDetails(_credentials.HasUsableDetails(p.Id),
                                       _settings.Current.MultiAccounts.FirstOrDefault(e => e.ProfileId == p.Id)?.Problem);
-        var r = _dialogs.AskAccount(p.DisplayName, typed?.UseOtp ?? p.UseOtp, edit: true,
+        var r = _dialogs.AskAccount(NameOf(p), typed?.UseOtp ?? p.UseOtp, edit: true,
                                     typed?.OtpSource ?? p.OtpSource, typed?.OtpItem ?? p.OtpItem, requireAll: requireAll,
                                     polId: typed?.PolId ?? "", squareEnixId: typed?.SeaId ?? "", otpAccount: typed?.OtpAccount ?? p.OtpAccount);
         if (r == null) return false;
         if (r.PolId.Length > 0 && ProfileWithPolId(r.PolId, except: p) is { } same)
         {
             _dialogs.Info("Account already added",
-                $"This PlayOnline ID is already saved as {same.DisplayName}, so nothing was changed.");
+                $"This PlayOnline ID is already saved as {NameOf(same)}, so nothing was changed.");
             return false;
         }
         var polEdit = AccountRules.SideEditOf(r.PolId, r.PolPassword);
@@ -326,7 +367,7 @@ public partial class AccountsViewModel : ObservableObject
         profile ??= SelectedProfile;
         if (profile == null) return;
         if (!_dialogs.Confirm("Remove account",
-                $"Remove {profile.DisplayName}, its saved passwords and its saved messages from this PC? Your PlayOnline account itself won't change.",
+                $"Remove {NameOf(profile)}, its saved passwords and its saved messages from this PC? Your PlayOnline account itself won't change.",
                 "REMOVE", ConfirmStyle.Destructive)) return;
         try { _credentials.DeleteProfile(profile.Id); }
         catch (Exception ex)

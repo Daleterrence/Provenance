@@ -653,7 +653,7 @@ public partial class MainViewModel : ObservableObject
             if (Lean.Hold(snap)) return;
             try
             {
-                Social.AccountName = Accounts.SelectedProfile?.DisplayName ?? "PlayOnline";
+                Social.AccountName = Accounts.SelectedProfile is { } shown ? Accounts.NameOf(shown) : "PlayOnline";
                 Social.Apply(snap);
                 timer?.Lap("apply");
                 Accounts.LearnIdentity(snap);

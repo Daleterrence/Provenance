@@ -27,11 +27,11 @@
                     <TextBlock Text="Account" FontSize="11.5" Margin="0,0,0,4" Foreground="{DynamicResource Text.3}" />
                     <ComboBox AutomationProperties.Name="Account" Style="{StaticResource OutlinedCombo}" FontSize="16"
                               Padding="14,10,10,10" materialDesign:HintAssist.IsFloating="False"
-                              ItemsSource="{Binding Accounts.Profiles}" DisplayMemberPath="DisplayName"
-                              SelectedItem="{Binding Accounts.SelectedProfile}">
+                              ItemsSource="{Binding Accounts.Picks}" DisplayMemberPath="Name"
+                              SelectedValuePath="Account" SelectedValue="{Binding Accounts.SelectedProfile}">
                         <ComboBox.ItemContainerStyle>
                             <Style TargetType="ComboBoxItem" BasedOn="{StaticResource MaterialDesignComboBoxItemStyle}">
-                                <Setter Property="AutomationProperties.Name" Value="{Binding DisplayName}" />
+                                <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
                             </Style>
                         </ComboBox.ItemContainerStyle>
                     </ComboBox>
