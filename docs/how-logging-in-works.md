@@ -9,7 +9,7 @@ To give you a TL;DR version - Your login details only ever go to Square Enix, an
 For those of you that prefer the detailed version, I'll start by saying that you don't need to be able to read code to follow this page. Each section starts with what it means for you, and the
 technical detail and links come after that, for anyone who wants to verify the claims made.
 
-Everything here describes `v1.0.0-pb.2.2`, and every link points at that release's code, so the line numbers won't drift as the code changes.
+Everything here describes `v1.0.0-pb.2.3`, and every link points at that release's code, so the line numbers won't drift as the code changes.
 
 ## The key bits
 
@@ -139,7 +139,7 @@ If you'd rather not type your one-time password in every time, Provenance can ge
 Logs are there so I can help you out when something goes wrong, and your passwords never go in them.
 
 - In Provenance's own log, account details just show up as `***` ([`ICredentialService.cs`][redact-acct], [`LoginRequest.cs`][redact-req], [`WindowsCredentialStore.cs`][redact-stored], [`OtpSources.cs`][redact-otp]).
-- The hook's log only ever shows the first two characters of an ID and how long it is, like `AB***(8)` ([`cred_mask_id`][mask]). Passwords and one-time passwords are never written to it.
+- The hook's log only ever shows the first two characters of an ID and how long it is, like `AB***(8)` ([`cred_mask_id`][mask]). Passwords and one-time passwords are never written to it. Its lines are copied into Provenance's own log as well, with the ID hidden altogether ([`HookLogRelay.cs`][relay-mask]).
 - Logs stay on your PC. Provenance doesn't upload them anywhere.
 
 ## What else is kept on your PC
@@ -169,7 +169,7 @@ This is every server Provenance connects to on its own, apart from the login its
 
 ## How Provenance gets from GitHub to your PC
 
-So all of that is fantastic and great, but it only really means something if the Provenance on your PC is actually built from this code in the first place. For this release, which is `v1.0.0-pb.2.2`, it is: the installer and the update package were both built by GitHub from the public code in this repository, **not** on my own PC (the pictures come from outside it, and are checked as described below). Before an update goes out, I sign it, and your copy of Provenance refuses any update that isn't signed, or doesn't match its signature exactly. In short, this means that the code that goes into a build is the exact code that is available here.
+So all of that is fantastic and great, but it only really means something if the Provenance on your PC is actually built from this code in the first place. For this release, which is `v1.0.0-pb.2.3`, it is: the installer and the update package were both built by GitHub from the public code in this repository, **not** on my own PC (the pictures come from outside it, and are checked as described below). Before an update goes out, I sign it, and your copy of Provenance refuses any update that isn't signed, or doesn't match its signature exactly. In short, this means that the code that goes into a build is the exact code that is available here.
 
 Every public build of Provenance has gone out this way. (The older `beta` releases you'll see on the releases page are from the closed beta.)
 
@@ -213,8 +213,8 @@ A couple of things to be aware of, though:
 
 None of this is required, of course, but if you'd like to double-check any of it, here's how.
 
-- Every link on this page goes to the exact lines in the `v1.0.0-pb.2.2` source.
-- To see which commit your copy was built from, find `Provenance.exe` in `%LocalAppData%\Provenance\current`, right-click it, then Properties > Details. The product version will read something like `1.0.0-pb.2.2+ed18c8b`, and the part after the `+` is the start of the commit it was built from ([`Directory.Build.props`][shortrev]). That's the commit the release's tag points at on GitHub. It's a label the build stamps in, so it's a useful way to match your copy to a release, but it isn't proof on its own.
+- Every link on this page goes to the exact lines in the `v1.0.0-pb.2.3` source.
+- To see which commit your copy was built from, find `Provenance.exe` in `%LocalAppData%\Provenance\current`, right-click it, then Properties > Details. The product version will read something like `1.0.0-pb.2.3+2eb0891`, and the part after the `+` is the start of the commit it was built from ([`Directory.Build.props`][shortrev]). That's the commit the release's tag points at on GitHub. It's a label the build stamps in, so it's a useful way to match your copy to a release, but it isn't proof on its own.
 - The website's installer is from the newest stable release, or the newest beta whilst there isn't a stable one yet. To check it's the same file as the one on GitHub, download `Provenance-setup.exe` from that release and from the website, then run `Get-FileHash .\Provenance-setup.exe` in PowerShell on each. The fingerprints will match.
 - A few points are about the PlayOnline Viewer itself rather than Provenance: the login address it saves for new members, how it works out the Square Enix value, that polcore's login starts on port 51240, and that it checks its own version every time you connect. Those can't be shown from this repository, but you can watch the viewer's own connections the same way as below.
 - You can see your saved entries in Control Panel > Credential Manager > Windows Credentials, as `Provenance:POL:...` and `Provenance:SEA:...`. Their user name is blank, and what's stored is the encrypted blob from step 1.
@@ -223,171 +223,172 @@ None of this is required, of course, but if you'd like to double-check any of it
 
 If anything on this page doesn't match the code, or something just doesn't make sense, I'd **really** like to know. Open an issue, or if it's a security problem, report it privately as [SECURITY.md](https://github.com/Daleterrence/Provenance/blob/main/SECURITY.md) says.
 
-[src]: https://github.com/Daleterrence/Provenance/tree/v1.0.0-pb.2.2/src
-[watcher]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/watcher.c
-[hookdir]: https://github.com/Daleterrence/Provenance/tree/v1.0.0-pb.2.2/native/hook
+[src]: https://github.com/Daleterrence/Provenance/tree/v1.0.0-pb.2.3/src
+[watcher]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/watcher.c
+[hookdir]: https://github.com/Daleterrence/Provenance/tree/v1.0.0-pb.2.3/native/hook
 
-[save-vm]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/ViewModels/Main/AccountsViewModel.cs#L239-L240
-[save-vm-edit]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/ViewModels/Main/AccountsViewModel.cs#L282-L286
-[credsvc-save]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/CredentialService.cs#L65-L75
-[credsvc-key]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/CredentialService.cs#L99-L103
-[credtargets]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/CredentialTargets.cs#L5-L6
-[wcs-format]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L176
-[wcs-save]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L29-L70
-[wcs-pack]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L220-L227
-[dpapi]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/Dpapi.cs#L23-L25
-[wcs-entropy]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L210-L216
-[wcs-blank]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L49-L57
-[wcs-write]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L194-L208
-[credkey-load]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/CredentialKey.cs#L109-L124
-[credkey-create]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/CredentialKey.cs#L139-L145
-[credkey-path]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/CredentialKey.cs#L17-L24
-[protfolders]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Security/ProtectedFolders.cs#L79-L92
-[apppaths]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/AppPaths.cs#L13-L14
-[locked]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Security/LockedFolder.cs#L539-L551
-[manifest]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/app.manifest#L7
-[acct-check]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/ViewModels/Main/AccountCheck.cs#L53-L73
+[save-vm]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/ViewModels/Main/AccountsViewModel.cs#L290-L291
+[save-vm-edit]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/ViewModels/Main/AccountsViewModel.cs#L333-L337
+[credsvc-save]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/CredentialService.cs#L65-L75
+[credsvc-key]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/CredentialService.cs#L99-L103
+[credtargets]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/CredentialTargets.cs#L5-L6
+[wcs-format]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L176
+[wcs-save]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L29-L70
+[wcs-pack]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L220-L227
+[dpapi]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/Dpapi.cs#L23-L25
+[wcs-entropy]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L210-L216
+[wcs-blank]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L49-L57
+[wcs-write]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L194-L208
+[credkey-load]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/CredentialKey.cs#L109-L124
+[credkey-create]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/CredentialKey.cs#L139-L145
+[credkey-path]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/CredentialKey.cs#L17-L24
+[protfolders]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Security/ProtectedFolders.cs#L79-L92
+[apppaths]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/AppPaths.cs#L13-L14
+[locked]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Security/LockedFolder.cs#L539-L551
+[manifest]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/app.manifest#L7
+[acct-check]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/ViewModels/Main/AccountCheck.cs#L53-L73
 
-[prepare]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/AccountRules.cs#L90-L98
-[gamelaunch]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/GameLaunch.cs#L81-L92
-[connect]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/PolSession.cs#L92-L106
-[viewer-update]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/PolSession.cs#L169-L175
-[hold]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/PolSession.cs#L210-L211
-[signedbuilds]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Patcher/SignedBuilds.cs#L35-L50
-[targets]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/LaunchCredentials.cs#L130-L151
-[oneshot-save]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/LaunchCredentials.cs#L122-L128
-[wcs-persist]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L56-L57
-[buildenv]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/PolSession.cs#L286-L292
-[setlogin]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/HookEnvironment.cs#L37-L65
-[setbase]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/HookEnvironment.cs#L12-L27
-[launcherstart]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/Watcher.cs#L50-L51
-[watcher-main]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/watcher.c#L249-L251
-[watcher-start]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/watcher.c#L128-L154
-[watcher-resume]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/watcher.c#L97-L118
-[prestart]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/login.c#L309-L350
-[gofile]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/HookEnvironment.cs#L85-L92
-[hookdir-set]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/App.xaml.cs#L114
-[prestart-allowed]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/login.c#L311-L343
-[watcher-windower]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/watcher.c#L163-L224
-[windower-start]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Game/Windower/WindowerStart.cs#L32-L58
-[ashita-apply]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Game/Ashita/AshitaLauncher.cs#L67
-[applycontract]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/HookEnvironment.cs#L95-L103
-[watcher-attach]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/watcher.c#L75-L95
+[prepare]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/AccountRules.cs#L90-L98
+[gamelaunch]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/GameLaunch.cs#L83-L96
+[connect]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/PolSession.cs#L133-L149
+[viewer-update]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/PolSession.cs#L212-L218
+[hold]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/PolSession.cs#L253-L254
+[signedbuilds]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Patcher/SignedBuilds.cs#L35-L50
+[targets]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/LaunchCredentials.cs#L130-L151
+[oneshot-save]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/LaunchCredentials.cs#L122-L128
+[wcs-persist]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L56-L57
+[buildenv]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/PolSession.cs#L329-L335
+[setlogin]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/HookEnvironment.cs#L37-L65
+[setbase]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/HookEnvironment.cs#L12-L27
+[launcherstart]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/Watcher.cs#L50-L51
+[watcher-main]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/watcher.c#L249-L251
+[watcher-start]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/watcher.c#L128-L154
+[watcher-resume]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/watcher.c#L97-L118
+[prestart]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/login.c#L309-L350
+[gofile]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/HookEnvironment.cs#L85-L92
+[hookdir-set]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/App.xaml.cs#L141
+[prestart-allowed]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/login.c#L311-L343
+[watcher-windower]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/watcher.c#L163-L224
+[windower-start]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Game/Windower/WindowerStart.cs#L32-L58
+[ashita-apply]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Game/Ashita/AshitaLauncher.cs#L67
+[applycontract]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/HookEnvironment.cs#L95-L103
+[watcher-attach]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/watcher.c#L75-L95
 
-[dllmain]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/pol_hook.c#L150-L187
-[install]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/pol_hook.c#L130-L138
-[menustub]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/pol_hook.c#L95-L105
-[fakesession]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/login.c#L563-L575
-[login]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/login.c#L547-L561
-[pwlen]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/login.c#L553-L558
-[readdetails]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/credentials.c#L67-L86
-[pccredread]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/pol_cred.h#L63-L123
-[readkey]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/pol_cred.h#L17-L29
-[entropy]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/pol_cred.h#L50-L61
-[pvw2]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/pol_cred.h#L77-L81
-[plain-refused]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/credentials.c#L40-L45
-[consume]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/credentials.c#L55-L66
-[session-steps]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/login.c#L494-L513
-[seed]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/credentials.c#L94-L129
-[sha1]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/credentials.c#L1-L8
-[otp-six]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/credentials.c#L113-L121
-[authrun]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/login.c#L446-L475
-[svc]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/polcore.h#L190-L197
-[svc2]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/polcore.h#L591-L614
-[addresses]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/addresses.c#L85-L121
+[dllmain]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/pol_hook.c#L150-L187
+[install]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/pol_hook.c#L130-L138
+[menustub]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/pol_hook.c#L95-L105
+[fakesession]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/login.c#L563-L575
+[login]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/login.c#L547-L561
+[pwlen]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/login.c#L553-L558
+[readdetails]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/credentials.c#L67-L86
+[pccredread]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/pol_cred.h#L63-L123
+[readkey]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/pol_cred.h#L17-L29
+[entropy]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/pol_cred.h#L50-L61
+[pvw2]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/pol_cred.h#L77-L81
+[plain-refused]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/credentials.c#L40-L45
+[consume]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/credentials.c#L55-L66
+[session-steps]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/login.c#L494-L513
+[seed]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/credentials.c#L94-L129
+[sha1]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/credentials.c#L1-L8
+[otp-six]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/credentials.c#L113-L121
+[authrun]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/login.c#L446-L475
+[svc]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/polcore.h#L190-L197
+[svc2]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/polcore.h#L591-L614
+[addresses]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/addresses.c#L85-L121
 
-[sockets]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/polcore_sockets.c
-[sockets-hook]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/polcore_sockets.c#L12-L49
-[polcore-connect]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/polcore_sockets.c#L1-L10
-[red-host]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/redirector.c#L1-L2
-[red-start]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/redirector.c#L250-L257
-[dllmain-red]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/pol_hook.c#L174
-[red-ask]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/redirector.c#L87-L119
-[red-aimed]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/redirector.c#L259-L264
-[red-connect]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/redirector.c#L266-L326
-[red-listen]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/redirector.c#L121-L138
-[red-serve]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/redirector.c#L140-L164
-[dns]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/Prestarter.cs#L85-L95
+[sockets]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/polcore_sockets.c
+[sockets-hook]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/polcore_sockets.c#L12-L49
+[polcore-connect]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/polcore_sockets.c#L1-L10
+[red-host]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/redirector.c#L1-L2
+[red-start]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/redirector.c#L250-L257
+[dllmain-red]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/pol_hook.c#L174
+[red-ask]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/redirector.c#L87-L119
+[red-aimed]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/redirector.c#L259-L264
+[red-connect]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/redirector.c#L266-L326
+[red-listen]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/redirector.c#L121-L138
+[red-serve]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/redirector.c#L140-L164
+[dns]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/Prestarter.cs#L85-L95
 
-[cleanup]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/PolSession.cs#L220-L228
-[sweep-start]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/LaunchCredentials.cs#L29-L37
-[sweep]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/LaunchCredentials.cs#L61-L76
-[chat-save]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/LaunchCredentials.cs#L165-L179
-[chat-read]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/chat_room.c#L344-L358
+[cleanup]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/PolSession.cs#L263-L271
+[sweep-start]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/LaunchCredentials.cs#L29-L37
+[sweep]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/LaunchCredentials.cs#L61-L76
+[chat-save]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/LaunchCredentials.cs#L165-L179
+[chat-read]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/chat_room.c#L344-L358
 
-[otp-fetch]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/OtpSources.cs#L40-L64
-[toolfinder]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/ToolFinder.cs#L18-L24
-[op]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/OnePassword.cs#L19-L32
-[bw]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/Bitwarden.cs#L15-L55
-[bw-login]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/Bitwarden.cs#L109-L158
-[otpdialog]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/Views/Dialogs/OtpDialog.xaml.cs#L125-L129
-[bw-unlock]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/Bitwarden.cs#L23-L31
-[bw-session]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/Bitwarden.cs#L13
-[bw-lock]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/Bitwarden.cs#L174-L190
-[kp-proxy]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/KeePassXc.cs#L142-L150
-[kp-fetch]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/KeePassXc.cs#L20-L67
-[kp-getlogins]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/KeePassXcClient.cs#L75-L88
-[kp-pick]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/KeePassXc.cs#L115-L127
-[kp-pair]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/KeePassXc.cs#L69-L86
+[otp-fetch]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/OtpSources.cs#L40-L64
+[toolfinder]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/ToolFinder.cs#L18-L24
+[op]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/OnePassword.cs#L19-L32
+[bw]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/Bitwarden.cs#L15-L55
+[bw-login]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/Bitwarden.cs#L109-L158
+[otpdialog]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/Views/Dialogs/OtpDialog.xaml.cs#L125-L129
+[bw-unlock]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/Bitwarden.cs#L23-L31
+[bw-session]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/Bitwarden.cs#L13
+[bw-lock]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/Bitwarden.cs#L174-L190
+[kp-proxy]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/KeePassXc.cs#L142-L150
+[kp-fetch]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/KeePassXc.cs#L20-L67
+[kp-getlogins]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/KeePassXcClient.cs#L75-L88
+[kp-pick]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/KeePassXc.cs#L115-L127
+[kp-pair]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/KeePassXc.cs#L69-L86
 
-[redact-acct]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/ICredentialService.cs#L28-L44
-[redact-req]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/LoginRequest.cs#L13-L17
-[redact-stored]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L245-L252
-[redact-otp]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/OtpSources.cs#L9-L18
-[mask]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/native/hook/credentials.c#L87-L93
+[redact-acct]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/ICredentialService.cs#L28-L44
+[redact-req]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/LoginRequest.cs#L13-L17
+[redact-stored]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Credentials/WindowsCredentialStore.cs#L245-L252
+[redact-otp]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/OtpSources.cs#L9-L18
+[mask]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/native/hook/credentials.c#L87-L93
+[relay-mask]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Hook/HookLogRelay.cs#L16-L26
 
-[masked-name]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/AccountRules.cs#L38
-[masked-use]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/ViewModels/Main/AccountsViewModel.cs#L205-L209
-[refused]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Login/RefusedPasswords.cs#L30-L36
-[otpreuse]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/OtpReuse.cs#L10-L22
-[otpreuse-hash]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/OtpReuse.cs#L61-L68
-[otpreuse-key]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/ViewModels/Main/AccountsViewModel.cs#L358-L360
+[masked-name]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/AccountRules.cs#L38
+[masked-use]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/ViewModels/Main/AccountsViewModel.cs#L256-L260
+[refused]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Login/RefusedPasswords.cs#L30-L36
+[otpreuse]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/OtpReuse.cs#L10-L22
+[otpreuse-hash]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/OtpReuse.cs#L61-L68
+[otpreuse-key]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/ViewModels/Main/AccountsViewModel.cs#L409-L411
 
-[patchproduct]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Patcher/PatchProduct.cs#L26-L39
-[polupdater]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Patcher/PolUpdater.cs#L123-L124
-[patchconnector]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Patcher/PatchConnector.cs#L19-L31
-[patchprotocol]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Patcher/PatchProtocol.cs#L34-L60
-[gameinstaller]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Install/GameInstaller.cs#L101
-[search]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Social/SearchServers.cs#L7-L32
-[searchclient]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Social/SearchClient.cs#L15-L26
-[banners]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Feeds/BannerImages.cs#L14-L27
-[playonline]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Feeds/PlayOnlineSite.cs#L12-L22
-[mirror]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Mirror/MirrorLayout.cs#L7
-[mirror-builds]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Mirror/MirrorLayout.cs#L28
-[selfupdate]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/Services/SelfUpdate.cs#L15
-[channel]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/Services/ChannelSource.cs#L24-L25
-[feed]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Feeds/FeedService.cs#L9
-[windower]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Game/Windower/WindowerHttp.cs#L12-L13
-[toolinstaller]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/ToolInstaller.cs#L15-L19
-[toolinstaller-cdn]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/ToolInstaller.cs#L125
-[tool-update]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/ToolInstaller.cs#L80-L101
-[toolsig]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/ToolSignature.cs#L133
-[op-update]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/OnePassword.cs#L31
-[bw-update]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Otp/Bitwarden.cs#L54
+[patchproduct]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Patcher/PatchProduct.cs#L26-L39
+[polupdater]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Patcher/PolUpdater.cs#L123-L124
+[patchconnector]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Patcher/PatchConnector.cs#L19-L31
+[patchprotocol]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Patcher/PatchProtocol.cs#L34-L60
+[gameinstaller]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Install/GameInstaller.cs#L101
+[search]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Social/SearchServers.cs#L7-L32
+[searchclient]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Social/SearchClient.cs#L15-L26
+[banners]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Feeds/BannerImages.cs#L14-L27
+[playonline]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Feeds/PlayOnlineSite.cs#L12-L22
+[mirror]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Mirror/MirrorLayout.cs#L7
+[mirror-builds]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Mirror/MirrorLayout.cs#L28
+[selfupdate]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/Services/SelfUpdate.cs#L15
+[channel]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/Services/ChannelSource.cs#L24-L25
+[feed]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Feeds/FeedService.cs#L9
+[windower]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Game/Windower/WindowerHttp.cs#L12-L13
+[toolinstaller]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/ToolInstaller.cs#L15-L19
+[toolinstaller-cdn]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/ToolInstaller.cs#L125
+[tool-update]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/ToolInstaller.cs#L80-L101
+[toolsig]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/ToolSignature.cs#L133
+[op-update]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/OnePassword.cs#L31
+[bw-update]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Otp/Bitwarden.cs#L54
 
-[ci]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/.github/workflows/build.yml
-[ci-pack]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/.github/workflows/build.yml#L24-L67
-[ci-tagcheck]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/.github/workflows/build.yml#L58-L62
-[ci-draft]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/.github/workflows/build.yml#L69-L79
-[ci-check]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/.github/workflows/build.yml#L106-L127
-[ci-upload]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/.github/workflows/build.yml#L153-L177
-[ci-setup]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/.github/workflows/build.yml#L170-L187
-[pack-clean]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/tools/pack-release.ps1#L33-L35
-[pack-build]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/tools/pack-release.ps1#L69-L78
-[pack-natives]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/tools/pack-release.ps1#L89-L95
-[pack-vpk]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/tools/pack-release.ps1#L97-L106
-[assets-pin]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/tools/assets.json#L1-L4
-[get-assets]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/tools/get-assets.ps1#L43-L47
-[apprelease]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Mirror/AppRelease.cs#L6-L7
-[releasegate]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/tools/ReleaseCheck/ReleaseGate.cs#L16-L33
-[releasegate-asset]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/tools/ReleaseCheck/ReleaseGate.cs#L84-L100
-[hastoupdate]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/Services/SelfUpdate.cs#L32
-[update-flow]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/Services/SelfUpdate.cs#L157-L170
-[channel-download]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/Services/ChannelSource.cs#L102-L117
-[channel-refuse]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/Services/ChannelSource.cs#L135-L164
-[keys]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Mirror/MirrorKeys.cs#L7-L15
-[signedblob]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Mirror/SignedBlob.cs#L31-L52
-[apprelease-check]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Common/Mirror/AppRelease.cs#L37-L63
-[selfupdate-check]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/Services/SelfUpdate.cs#L288-L304
-[channel-fallback]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/src/Provenance.Wpf/Services/ChannelSource.cs#L35-L100
-[shortrev]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.2/Directory.Build.props#L49-L54
+[ci]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/.github/workflows/build.yml
+[ci-pack]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/.github/workflows/build.yml#L24-L67
+[ci-tagcheck]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/.github/workflows/build.yml#L58-L62
+[ci-draft]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/.github/workflows/build.yml#L69-L79
+[ci-check]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/.github/workflows/build.yml#L106-L127
+[ci-upload]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/.github/workflows/build.yml#L153-L177
+[ci-setup]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/.github/workflows/build.yml#L170-L187
+[pack-clean]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/tools/pack-release.ps1#L33-L35
+[pack-build]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/tools/pack-release.ps1#L69-L78
+[pack-natives]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/tools/pack-release.ps1#L89-L95
+[pack-vpk]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/tools/pack-release.ps1#L97-L106
+[assets-pin]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/tools/assets.json#L1-L4
+[get-assets]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/tools/get-assets.ps1#L43-L47
+[apprelease]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Mirror/AppRelease.cs#L6-L7
+[releasegate]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/tools/ReleaseCheck/ReleaseGate.cs#L16-L33
+[releasegate-asset]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/tools/ReleaseCheck/ReleaseGate.cs#L84-L100
+[hastoupdate]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/Services/SelfUpdate.cs#L32
+[update-flow]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/Services/SelfUpdate.cs#L161-L174
+[channel-download]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/Services/ChannelSource.cs#L102-L117
+[channel-refuse]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/Services/ChannelSource.cs#L135-L164
+[keys]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Mirror/MirrorKeys.cs#L7-L15
+[signedblob]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Mirror/SignedBlob.cs#L31-L52
+[apprelease-check]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Common/Mirror/AppRelease.cs#L37-L63
+[selfupdate-check]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/Services/SelfUpdate.cs#L292-L308
+[channel-fallback]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/src/Provenance.Wpf/Services/ChannelSource.cs#L35-L100
+[shortrev]: https://github.com/Daleterrence/Provenance/blob/v1.0.0-pb.2.3/Directory.Build.props#L49-L54
