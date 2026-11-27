@@ -203,6 +203,7 @@ public partial class MainViewModel : ObservableObject
         if (next is SessionPhase.LoggingOut or SessionPhase.MultiRun) _windows.CloseSessionWindows();
         if (next == SessionPhase.LoggingOut) Social.GroupChat.CloseQuietly();
         Session.Set(next);
+        PlayPlatform.Changed();
         _listPoll.IsEnabled = next is SessionPhase.InGame or SessionPhase.MultiRun;
         switch (next)
         {
@@ -613,7 +614,7 @@ public partial class MainViewModel : ObservableObject
     private bool StartsAllAtOpen(bool suppressed) => !ShowSetupCard && MultiAccountRules.StartsAtOpen(_settings.Current, suppressed);
 
     internal bool StartsLean(bool suppressed) => CommandLine is not null
-        ? CommandLineProblem() is null && Lean.Ready
+        ? Lean.Ready
         : !StartsAllAtOpen(suppressed) && LogsInAtStart(suppressed) && Accounts.SelectedProfile is not null && !ShowSetupCard && Lean.Wanted;
 
     public const string CommandLineTitle = "Provenance";
@@ -622,19 +623,13 @@ public partial class MainViewModel : ObservableObject
 
     public CommandLineTarget? CommandLine { get; set; }
 
-    internal string? CommandLineProblem() => !GameInstalled ? CommandLineNotInstalled : ShowSetupCard ? CommandLineSetupFirst : null;
+    internal static string? CommandLineNotReady(bool gameInstalled, bool setupPending) =>
+        !gameInstalled ? CommandLineNotInstalled : SetupCardWaits(setupPending, gameInstalled, hasProfile: true) ? CommandLineSetupFirst : null;
 
     internal void StartFromCommandLine()
     {
         _launch.DropAhead();
         if (CommandLine is not { } target) return;
-        if (CommandLineProblem() is { } problem)
-        {
-            CommandLine = null;
-            _dialogs.Error(CommandLineTitle, problem);
-            RaiseExit();
-            return;
-        }
         Log.Information("Logging in to {Account} from the command line", target.Account.Id);
         Accounts.SelectForLaunch(target.Account);
         LogInCommand.Execute(null);
@@ -687,7 +682,7 @@ public partial class MainViewModel : ObservableObject
             if (Lean.Hold(snap)) return;
             try
             {
-                Social.AccountName = Accounts.SelectedProfile is { } shown ? Accounts.NameOf(shown) : "PlayOnline";
+                Social.AccountName = Accounts.SelectedProfile?.DisplayName ?? "PlayOnline";
                 Social.Apply(snap);
                 timer?.Lap("apply");
                 Accounts.LearnIdentity(snap);
@@ -826,16 +821,20 @@ public partial class MainViewModel : ObservableObject
         if (Accounts.SelectedProfile is not { } profile) { _launch.DropAhead(); return; }
         bool lean = Lean.Open(force: commandLine is not null);
         (PolAccount Pol, SquareEnixAccount SquareEnix, string Otp)? details = null;
-        try { details = LogInDetails(profile); }
+        try { details = LogInDetails(profile, commandLine); }
         finally
         {
             if (details is null)
             {
-                Lean.Finish();
+                Lean.Finish(showFull: commandLine is null);
                 _launch.DropAhead();
             }
         }
-        if (details is not var (pol, squareEnix, otp)) return;
+        if (details is not var (pol, squareEnix, otp))
+        {
+            if (commandLine is not null) RaiseExit();
+            return;
+        }
         Log.Information("Login details read for account {Profile}", profile.Id);
         if (lean) DropHandleNotice();
         else StartSocial(profile.Id);
@@ -866,9 +865,10 @@ public partial class MainViewModel : ObservableObject
             else
             {
                 CanCancel = false;
-                Lean.Finish();
+                Lean.Finish(showFull: commandLine is null);
                 await ReleaseHeldSessionAsync();
-                var failure = AccountRules.LoginFailure(code, lastFailure, Accounts.AutoLogin);
+                bool isAutoLoginAccount = commandLine is null || AccountsViewModel.ProfileAtStart(_settings.Current)?.Id == profile.Id;
+                var failure = AccountRules.LoginFailure(code, lastFailure, Accounts.AutoLogin && isAutoLoginAccount);
                 if (failure.AutoOff) Accounts.AutoLogin = false;
                 if (code != LoginCodes.Cancelled)
                     _dialogs.Error(failure.Title, failure.Text, offerLogs: failure.OfferLogs);
@@ -882,7 +882,7 @@ public partial class MainViewModel : ObservableObject
         {
             Log.Error(ex, "The login failed");
             await ReleaseHeldSessionAsync();
-            Lean.Finish();
+            Lean.Finish(showFull: commandLine is null);
             _dialogs.Error("Couldn't log in",
                 ErrorText.Of(ex, "Provenance ran into a problem while logging in. Try again, and if it keeps happening, press Open logs to see what went wrong."),
                 offerLogs: true);
@@ -891,18 +891,24 @@ public partial class MainViewModel : ObservableObject
         {
             EndCancellable();
             if (!gameRan) SetPhase(loggedIn ? SessionPhase.LoggedIn : SessionPhase.LoggedOut);
-            Lean.Finish();
+            Lean.Finish(showFull: commandLine is null || loggedIn);
             _launch.DropAhead();
+        }
+        if (commandLine is not null && !loggedIn)
+        {
+            RaiseExit();
+            return;
         }
         if (startAfter && PlayCommand.CanExecute(null)) await PlayCommand.ExecuteAsync(null);
         if (lean && loggedIn) await Lean.FollowUpAsync();
     }
 
-    private (PolAccount Pol, SquareEnixAccount SquareEnix, string Otp)? LogInDetails(Account profile)
+    private (PolAccount Pol, SquareEnixAccount SquareEnix, string Otp)? LogInDetails(Account profile, CommandLineTarget? commandLine)
     {
         if (!Accounts.HasSavedCredentials && !Accounts.EditAccount(profile, requireAll: true)) return null;
         if (!EnsureMemberAgreement() || Accounts.LoadForLogIn(profile) is not var (pol, squareEnix)) return null;
-        var claim = _launch.Claim(profile, () => Accounts.AskOtp(profile, squareEnix), () => _launch.StartAhead(profile));
+        var mine = commandLine?.Account.Id == profile.Id ? commandLine : null;
+        var claim = _launch.Claim(profile, () => Accounts.AskOtp(profile, squareEnix), () => _launch.StartAhead(profile, mine?.Platform, mine?.Profile));
         if (claim.InUse is { } inUse) _dialogs.Error("Account in use", inUse);
         return claim.Otp is { } otp && claim.InUse is null ? (pol, squareEnix, otp) : null;
     }

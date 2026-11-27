@@ -71,10 +71,12 @@ public sealed class GameLaunch(PolSession pol, ISettingsService settings)
         return new(otp, null, false);
     }
 
-    public void StartAhead(Account p)
+    public void StartAhead(Account p, ThirdPartyHook? platform = null, string? profile = null)
     {
-        if (LogInSeam is null) pol.StartAhead(p.Id, new SessionOptions(false, null));
+        if (LogInSeam is null) pol.StartAhead(p.Id, AheadFor(platform, profile));
     }
+
+    internal static SessionOptions AheadFor(ThirdPartyHook? platform, string? profile) => new(false, profile, Platform: platform);
 
     public void DropAhead() => pol.DropAhead();
 

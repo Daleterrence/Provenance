@@ -10,7 +10,10 @@ namespace Provenance.Wpf.ViewModels.Main;
 
 public sealed class PlayPlatform(PolSession pol, ISettingsService settings) : ObservableObject
 {
-    public string? Subtitle => pol.Platform switch
+    // a command-line login can bring its own platform, and that's the one Play uses while it's going
+    private ThirdPartyHook Platform => pol.Pid is null ? pol.Platform : pol.SessionPlatform;
+
+    public string? Subtitle => Platform switch
     {
         ThirdPartyHook.Windower => "WINDOWER LOADED",
         ThirdPartyHook.Ashita => "ASHITA LOADED",
@@ -26,16 +29,16 @@ public sealed class PlayPlatform(PolSession pol, ISettingsService settings) : Ob
 
     public sealed record Choice(string Name, string Display, bool Current);
 
-    public bool HasChoices => pol.Platform is ThirdPartyHook.Windower or ThirdPartyHook.Ashita;
+    public bool HasChoices => Platform is ThirdPartyHook.Windower or ThirdPartyHook.Ashita;
 
-    public string ChoicesTitle => pol.Platform == ThirdPartyHook.Ashita ? "Boot configuration" : "Windower profile";
+    public string ChoicesTitle => Platform == ThirdPartyHook.Ashita ? "Boot configuration" : "Windower profile";
 
-    public string NoChoicesText => pol.Platform == ThirdPartyHook.Ashita
+    public string NoChoicesText => Platform == ThirdPartyHook.Ashita
         ? "No boot configurations found" : "No Windower profiles found";
 
     public IReadOnlyList<Choice> Choices()
     {
-        var target = PlayTarget.For(settings.Current, null);
+        var target = PlayTarget.For(settings.Current, null, Platform);
         if (target.Platform == ThirdPartyHook.Ashita)
             return AshitaBootFiles.Names(target.Dir)
                 .Select(n => new Choice(n.File, n.Shown, target.Is(n.File))).ToList();
@@ -59,7 +62,7 @@ public sealed class PlayPlatform(PolSession pol, ISettingsService settings) : Ob
 
     public void Pick(string name)
     {
-        var platform = pol.Platform;
+        var platform = Platform;
         if (platform is not (ThirdPartyHook.Ashita or ThirdPartyHook.Windower)) return;
         settings.SaveChange(s =>
         {

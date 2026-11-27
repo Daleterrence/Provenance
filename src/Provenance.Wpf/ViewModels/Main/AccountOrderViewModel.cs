@@ -9,9 +9,9 @@ namespace Provenance.Wpf.ViewModels.Main;
 public sealed partial class AccountOrderItem(Account account, string name, ImageSource? picture) : ObservableObject
 {
     public Account Account { get; } = account;
-    public string Name { get; } = name;
     public ImageSource? Picture { get; } = picture;
 
+    [ObservableProperty] private string _name = name;
     [ObservableProperty] private bool _canMoveUp;
     [ObservableProperty] private bool _canMoveDown;
 }
@@ -50,6 +50,7 @@ public sealed partial class AccountOrderViewModel : ObservableObject
         {
             Items[i].CanMoveUp = i > 0;
             Items[i].CanMoveDown = i < Items.Count - 1;
+            Items[i].Name = _accounts.NameOf(Items[i].Account);
         }
     }
 }

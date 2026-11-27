@@ -60,12 +60,15 @@ public static class SelfUpdate
 
     public static Task<bool> RunAsync(LaunchArgs args, bool noAutoLogin)
     {
-        if (InstalledCopy) return RunAsync(args, noAutoLogin, Open, WindowManager.ShowUpdate);
+        if (InstalledCopy) return RunAsync(args, noAutoLogin, Open, WindowManager.ShowUpdate,
+                                           text => StartupErrors.Show(MainViewModel.CommandLineTitle, text, offerLogs: false));
         Log.Information("Not an installed copy, so no update check");
         return Task.FromResult(false);
     }
 
-    internal static async Task<bool> RunAsync(LaunchArgs args, bool noAutoLogin, Func<Updater> open, Func<UpdateWindow> newWindow)
+    public const string CommandLineWhileInstalling = "Provenance is installing an update right now. Try the command again once it's finished.";
+
+    internal static async Task<bool> RunAsync(LaunchArgs args, bool noAutoLogin, Func<Updater> open, Func<UpdateWindow> newWindow, Action<string>? tell = null)
     {
         UpdateWindow? window = null;
         using var quit = new CancellationTokenSource();
@@ -90,6 +93,7 @@ public static class SelfUpdate
                 {
                     var step = await Attempt(open, afterUpdate, args.ForRestart(noAutoLogin), Show, quit.Token);
                     handedOver = step == Step.HandedOver;
+                    if (step == Step.Close && args.FromCommandLine) tell?.Invoke(CommandLineWhileInstalling);
                     return step != Step.Start;
                 }
                 catch (UpdateProblem p) { problem = p.Problem; }

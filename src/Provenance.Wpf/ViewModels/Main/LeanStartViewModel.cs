@@ -69,10 +69,15 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
         links.ShowFull();
     }
 
-    internal void Finish()
+    internal void Finish(bool showFull = true)
     {
         _lean = false;
-        ShowFull();
+        if (showFull) ShowFull();
+        else if (_shown)
+        {
+            _shown = false;
+            windows.CloseLeanStart();
+        }
     }
 
     internal bool Hold(PolSocialSnapshot snap)

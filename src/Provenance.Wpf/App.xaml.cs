@@ -85,7 +85,9 @@ public partial class App : Application
         {
             string? problem = args.Problem;
             if (args.Play is { } play) commandLine = CommandLineLaunch.Resolve(settings.Current, play, out problem);
-            if (commandLine is null)
+            if (commandLine is not null)
+                problem = MainViewModel.CommandLineNotReady(MainViewModel.GameInstalledIn(settings.DetectedRegion), settings.Current.SetupPending);
+            if (commandLine is null || problem is not null)
             {
                 Log.Information("Started from the command line, but it couldn't be used");
                 StartupErrors.Show(MainViewModel.CommandLineTitle, problem ?? "", offerLogs: false);

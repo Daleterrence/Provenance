@@ -12,7 +12,10 @@ public static class CommandLine
 
     public static string NeedsName(string flag) => $"{flag} needs a name after it.";
 
-    public static PlayRequest? Parse(IReadOnlyList<string> args, out string? problem)
+    public static string UnknownSwitch(string name) =>
+        $"Provenance doesn't know the switch {name}. To log in from the command line, use --play \"<handle name>\" with --windower or --ashita.";
+
+    public static PlayRequest? Parse(IReadOnlyList<string> args, out string? problem, IReadOnlyCollection<string>? appSwitches = null)
     {
         problem = null;
         string? handle = null, profile = null;
@@ -38,6 +41,13 @@ public static class CommandLine
                     break;
                 case "--ashita":
                     ours = ashita = true;
+                    break;
+                default:
+                    if ((args[i].StartsWith('-') || args[i].StartsWith('/')) && appSwitches?.Contains(name, StringComparer.OrdinalIgnoreCase) != true)
+                    {
+                        problem = UnknownSwitch(args[i].Split('=', 2)[0]);
+                        return null;
+                    }
                     break;
             }
         }

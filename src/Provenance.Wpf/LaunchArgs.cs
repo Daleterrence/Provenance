@@ -29,7 +29,7 @@ public sealed class LaunchArgs
         AfterUpdate = Has(AfterUpdateSwitch);
         ShiftHeld = Has(ShiftHeldSwitch);
         UpdateHeld = Has(UpdateHeldSwitch);
-        Play = CommandLine.Parse(args, out var problem);
+        Play = CommandLine.Parse(args, out var problem, [NoAutoLoginSwitch, ShiftHeldSwitch, AfterUpdateSwitch, UpdateHeldSwitch]);
         Problem = problem;
     }
 

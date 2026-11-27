@@ -5,11 +5,11 @@ using Provenance.Common.Settings;
 
 namespace Provenance.Common.Login;
 
-public sealed record CommandLineTarget(Account Account, ThirdPartyHook Platform, string Profile);
+public sealed record CommandLineTarget(Account Account, ThirdPartyHook Platform, string? Profile);
 
 public static class CommandLineLaunch
 {
-    public sealed record Installed(IReadOnlyList<(string Name, string Shown)> Choices, string Saved);
+    public sealed record Installed(IReadOnlyList<(string Name, string Shown)> Choices);
 
     public const string NeedsPlatform = "Logging in from the command line needs Windower or Ashita. Add --windower or --ashita to the command.";
 
@@ -44,7 +44,7 @@ public static class CommandLineLaunch
             problem = NotSetUp(platform);
             return null;
         }
-        if (r.Profile is null) return new(account, platform, installed.Saved);
+        if (r.Profile is null) return new(account, platform, null);
         var picked = installed.Choices.FirstOrDefault(c => c.Name.Equals(r.Profile, StringComparison.OrdinalIgnoreCase)
                                                            || c.Shown.Equals(r.Profile, StringComparison.OrdinalIgnoreCase));
         if (picked.Name is null)
@@ -60,8 +60,8 @@ public static class CommandLineLaunch
         var target = PlayTarget.For(s, null, platform);
         if (target.Dir is null) return null;
         if (platform == ThirdPartyHook.Ashita)
-            return new(AshitaBootFiles.Names(target.Dir).Select(n => (n.File, n.Shown)).ToList(), target.Profile);
+            return new(AshitaBootFiles.Names(target.Dir).Select(n => (n.File, n.Shown)).ToList());
         var names = WindowerInstall.Profiles(target.Dir);
-        return new(names.Select(n => (n, WindowerInstall.DisplayName(n, names))).ToList(), target.Profile);
+        return new(names.Select(n => (n, WindowerInstall.DisplayName(n, names))).ToList());
     }
 }

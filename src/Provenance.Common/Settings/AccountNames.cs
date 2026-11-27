@@ -5,15 +5,24 @@ public static class AccountNames
     public static string Of(IReadOnlyList<Account> profiles, Account account)
     {
         if (string.IsNullOrWhiteSpace(account.HandleName)) return account.DisplayName;
-        int n = 0;
+        var handle = account.HandleName;
+        int seen = 0, number = 1;
         foreach (var p in profiles)
         {
-            if (!string.Equals(p.HandleName, account.HandleName, StringComparison.OrdinalIgnoreCase)) continue;
-            n++;
-            if (p.Id == account.Id) return n == 1 ? account.HandleName : $"{account.HandleName} ({n})";
+            if (!string.Equals(p.HandleName, handle, StringComparison.OrdinalIgnoreCase)) continue;
+            if (++seen > 1)
+            {
+                do number++;
+                while (Taken(profiles, $"{handle} ({number})"));
+            }
+            if (p.Id == account.Id) return seen == 1 ? handle : $"{handle} ({number})";
         }
-        return account.HandleName;
+        return handle;
     }
+
+    // a real handle can have brackets in it too
+    private static bool Taken(IReadOnlyList<Account> profiles, string name) =>
+        profiles.Any(p => string.Equals(p.HandleName, name, StringComparison.OrdinalIgnoreCase));
 
     public static Account? Find(IReadOnlyList<Account> profiles, string name)
     {
