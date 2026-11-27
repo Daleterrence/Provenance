@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Provenance.OtpProbe</RootNamespace>
+    <AssemblyName>ProvenanceOtpProbe</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Product>Provenance</Product>
+  </PropertyGroup>
+
+</Project>
