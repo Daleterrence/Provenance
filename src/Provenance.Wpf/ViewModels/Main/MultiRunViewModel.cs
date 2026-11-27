@@ -162,7 +162,8 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
             _session.NoteRunChanged();
         }
         var failures = result?.Failures ?? [];
-        Log.Information("Multi-account mode: finished, {Failures} failure(s), stopped {Stopped}", failures.Count, result?.Stopped);
+        Log.Information("Multi-account mode: finished, {Started} started, {Already} already in the game, {Failures} failure(s), stopped {Stopped}",
+                        result?.Started, result?.AlreadyInGame, failures.Count, result?.Stopped);
         if (_exitAfterStop) { RequestExit?.Invoke(); return; }
         if (failures.Count > 0 || unexpected != null || _lateGameFailures.Count > 0)
         {
