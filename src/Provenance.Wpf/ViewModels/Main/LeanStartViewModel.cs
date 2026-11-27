@@ -20,7 +20,7 @@ internal sealed record LeanStartLinks(
     Action<PolSocialSnapshot> ApplySnapshot,
     Func<GameCheck?, Task> Play,
     Action ShowFull,
-    Action Exit);
+    Action<string> Exit);
 
 internal sealed record LeanEnd(int Code, string? Failure, bool Handled);
 
@@ -212,7 +212,7 @@ internal sealed class LeanStartViewModel(IDialogs dialogs, IWindowManager window
         pol.GameExited();
         if (HookExitText.GameEndedText(exit) is not { } ended)
         {
-            links.Exit();
+            links.Exit("the game ended, and this copy only ever showed the small login window");
             return new(0, null, true);
         }
         Log.Error("FINAL FANTASY XI didn't start (pol.exe exit code {Code})", exit);

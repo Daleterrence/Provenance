@@ -122,9 +122,10 @@ public sealed class SettingsService : ISettingsService
         if (!File.Exists(_path)) Write(Current);
         else if (ReadSaved() is { } saved)
         {
-            var before = JsonSerializer.Serialize(saved, JsonOptions);
+            var before = Node(saved);
             change(saved);
-            if (JsonSerializer.Serialize(saved, JsonOptions) != before && !WriteFile(Node(saved))) return;
+            var after = Node(saved);
+            if (!JsonNode.DeepEquals(before, after) && !WriteFile(after, before)) return;
             var known = _known.Deserialize<LauncherSettings>(JsonOptions)!;
             change(known);
             _known = Node(known);
@@ -142,7 +143,7 @@ public sealed class SettingsService : ISettingsService
         var mine = Node(settings);
         var file = saved is null ? null : Node(saved);
         var merged = file is null ? mine : Merge(mine, _known, file);
-        if ((file is not null && JsonNode.DeepEquals(merged, file)) || WriteFile(merged))
+        if ((file is not null && JsonNode.DeepEquals(merged, file)) || WriteFile(merged, file))
         {
             _known = mine;
             return true;
@@ -151,7 +152,7 @@ public sealed class SettingsService : ISettingsService
     }
 
     // temp file then a move, a truncated settings.json would load as defaults and lose every account
-    private bool WriteFile(JsonObject settings)
+    private bool WriteFile(JsonObject settings, JsonObject? before)
     {
         if (_unreadable) return false;
         IDisposable? gate = null;
@@ -159,10 +160,8 @@ public sealed class SettingsService : ISettingsService
         {
             gate = HoldLock();
             AtomicFile.Write(_path, settings.ToJsonString(JsonOptions));
-            Log.Debug("Settings saved to {Path}", _path);
             SaveProblem = null;
             _saveFailedRaised = false;
-            return true;
         }
         catch (Exception ex)
         {
@@ -176,6 +175,9 @@ public sealed class SettingsService : ISettingsService
             return false;
         }
         finally { gate?.Dispose(); }
+        try { Log.Debug("Settings saved: {Changed:l}", SettingsDiff.Changed(before, settings)); }
+        catch (Exception ex) { Log.Debug(ex, "Couldn't say what the settings save changed"); }
+        return true;
     }
 
     private static JsonObject Node(LauncherSettings settings) => JsonSerializer.SerializeToNode(settings, JsonOptions)!.AsObject();

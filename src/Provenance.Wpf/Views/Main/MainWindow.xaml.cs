@@ -19,7 +19,7 @@ public partial class MainWindow : AppWindow
     {
         InitializeComponent();
         TaskbarItemInfo = new System.Windows.Shell.TaskbarItemInfo();
-        Tray = new TrayMode(this, ExitApp, () => _asking);
+        Tray = new TrayMode(this, ExitFromTray, () => _asking);
         Tray.BackFromTray += async () =>
         {
             if (Vm is { } vm && await SelfUpdate.UpdateWaitingAsync()) SelfUpdate.ShowWaiting(vm.UpdateNotice);
@@ -148,20 +148,36 @@ public partial class MainWindow : AppWindow
         if (!_closed) Tray.ShowWindow();
     }
 
+    private string? _closingWhy;
+
+    private void ExitFromTray()
+    {
+        _closingWhy ??= "Exit was chosen from the tray icon";
+        ExitApp();
+    }
+
     private void OnRequestRestart()
     {
+        _closingWhy ??= "restarting to change Windower or Ashita, as asked in Settings";
         App.RestartOnExit = true;
         ExitApp();
     }
 
     private void OnRequestUpdateRestart()
     {
+        _closingWhy ??= "restarting to install an update";
         App.RestartForUpdate = true;
         Dispatcher.InvokeAsync(ExitWithoutAsking);
     }
 
     // not from inside Closing, Close throws in there
-    private void OnRequestExit() => Dispatcher.InvokeAsync(ExitWithoutAsking);
+    private void OnRequestExit(string why) => Dispatcher.InvokeAsync(() => ExitBecause(why));
+
+    internal void ExitBecause(string why)
+    {
+        _closingWhy ??= why;
+        ExitWithoutAsking();
+    }
 
     internal void OnMinimize(object sender, RoutedEventArgs e)
     {
@@ -176,6 +192,7 @@ public partial class MainWindow : AppWindow
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
         if (GoToTray(e) || WaitForLogInCancel(e) || WaitForAnswer(e) || StopMultiRun(e) || ConfirmDropProfile(e)) return;
+        AppClosing.Because(_closingWhy ?? "the window was closed");
         Vm?.Social.Messages.SettleSends(SessionEnd.LogOut);
         Tray.Dispose();
         base.OnClosing(e);
@@ -246,6 +263,7 @@ public partial class MainWindow : AppWindow
     private void StayOpen()
     {
         _exiting = false;
+        _closingWhy = null;
         App.RestartOnExit = false;
         if (!App.RestartForUpdate) return;
         App.RestartForUpdate = false;

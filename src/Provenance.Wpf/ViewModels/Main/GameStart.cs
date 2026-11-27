@@ -19,7 +19,7 @@ internal sealed record GameStartLinks(
     Action ShowHandles,
     Action Hide,
     Action Show,
-    Action Exit);
+    Action<string> Exit);
 
 internal sealed class GameStart(IDialogs dialogs, IWindowManager windows, ISettingsService settings, PolSession pol, GameLaunch launch,
                                 MainViewModel main, GameStartLinks links)
@@ -99,7 +99,11 @@ internal sealed class GameStart(IDialogs dialogs, IWindowManager windows, ISetti
         pol.GameExited();
         var ended = HookExitText.GameEndedText(exit);
         if (ended is not null) Log.Error("FINAL FANTASY XI didn't start (pol.exe exit code {Code})", exit);
-        else if (settings.Current.ExitAfterGameExits) { links.Exit(); return; }
+        else if (settings.Current.ExitAfterGameExits)
+        {
+            links.Exit("the game ended and Close Provenance when the game exits is on");
+            return;
+        }
         links.SetPhase(SessionPhase.LoggedOut);
         links.Show();
         pol.Prestarter.Prestart();

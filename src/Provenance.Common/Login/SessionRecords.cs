@@ -56,8 +56,9 @@ public sealed class SessionRecords
         {
             using var claim = AdminLock.TryAcquire(SessionClaimLock, TimeSpan.FromSeconds(5));
             if (claim is null) { problem = "Another copy of Provenance is busy logging in. Try again in a moment."; return false; }
-            if (HeldByAnotherCopy(profileId))
+            if (Holder(profileId) is { } holder)
             {
+                Log.Information("Account {Account} is in use: {How:l}", profileId, HeldHow(holder));
                 problem = GameRunningFor(profileId)
                     ? "FINAL FANTASY XI is already running on this account. Log in again once you've closed that game."
                     : "You're already logged in to this account in another copy of Provenance. If its window is closed, you can reopen it from the tray icon.";
@@ -108,6 +109,8 @@ public sealed class SessionRecords
             if (ownerAlive && s.OwnerPid != Environment.ProcessId) continue;
             if (!_ourPol.Ours(s.Game))
             {
+                if (s.Pid != 0)
+                    Log.Debug("Session record of pol.exe {Pid} for account {Account} removed: that pol.exe isn't running any more", s.Pid, s.ProfileId ?? "nobody yet");
                 FileDelete.Try(path);
                 continue;
             }
@@ -117,17 +120,24 @@ public sealed class SessionRecords
         }
     }
 
-    internal static bool HeldByAnotherCopy(string profileId)
+    internal static bool HeldByAnotherCopy(string profileId) => Holder(profileId) is not null;
+
+    private static SessionStore.SessionFile? Holder(string profileId)
     {
         foreach (var path in SessionStore.SessionFilePaths())
         {
             if (SessionStore.TryReadRecord(path) is not { } f || f.ProfileId != profileId) continue;
             if (f.Pid != 0 && !f.Game.IsRunning()) continue;
-            if (f.Played) return true;
-            if (f.OwnerPid != Environment.ProcessId && f.Owner.MightBeRunning()) return true;
+            if (f.Played) return f;
+            if (f.OwnerPid != Environment.ProcessId && f.Owner.MightBeRunning()) return f;
         }
-        return false;
+        return null;
     }
+
+    private static string HeldHow(SessionStore.SessionFile holder) =>
+        holder.Pid == 0 ? $"Provenance {holder.OwnerPid} is logging it in"
+        : holder.Played ? $"pol.exe {holder.Pid} is in the game, started by Provenance {holder.OwnerPid}"
+        : $"pol.exe {holder.Pid} is logged in, held by Provenance {holder.OwnerPid}";
 
     public static bool GameRunningFor(string profileId) => SessionStore.SessionFilePaths().Any(path =>
         SessionStore.TryReadRecord(path) is { Played: true } f && f.ProfileId == profileId && f.Game.IsRunning());

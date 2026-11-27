@@ -25,8 +25,10 @@ public static class HookFiles
     public static string RequiredDir => _dir ?? throw new InvalidOperationException(
         "The folder of the hook's files is not set (HookFiles.Dir): they need a folder only administrators can open.");
 
-    public static string PathFor(int pid, string name) =>
-        Path.Combine(RequiredDir, string.Format(CultureInfo.InvariantCulture, HookContract.Files.Name, pid, name));
+    public static string PathFor(int pid, string name) => PathIn(RequiredDir, pid, name);
+
+    internal static string PathIn(string dir, int pid, string name) =>
+        Path.Combine(dir, string.Format(CultureInfo.InvariantCulture, HookContract.Files.Name, pid, name));
 
     public static string[] RequestPaths(int pid, string ext)
     {
@@ -196,7 +198,9 @@ public static class HookFiles
             {
                 bool remove = ext.Equals(HookContract.Files.Log, StringComparison.OrdinalIgnoreCase)
                     ? nowUtc - f.LastWriteTimeUtc > logAge
-                    : nowUtc - f.LastWriteTimeUtc > OrphanAge && !isAlive(pid);
+                    : ext.Equals(HookLogRelay.Marker, StringComparison.OrdinalIgnoreCase)
+                        ? !File.Exists(PathIn(dir, pid, HookContract.Files.Log))
+                        : nowUtc - f.LastWriteTimeUtc > OrphanAge && !isAlive(pid);
                 if (!remove) continue;
                 f.Refresh();
                 if (!f.Exists) continue;
@@ -208,7 +212,7 @@ public static class HookFiles
         return deleted;
     }
 
-    private static bool TryParse(string name, out int pid, out string ext)
+    internal static bool TryParse(string name, out int pid, out string ext)
     {
         pid = 0;
         ext = "";

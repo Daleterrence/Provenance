@@ -44,7 +44,7 @@ public partial class MainViewModel : ObservableObject
     public event Action? RequestShow;
     public event Action? RequestRestart;
     public event Action? RequestUpdateRestart;
-    public event Action? RequestExit;
+    public event Action<string>? RequestExit;
     public event Action<bool, bool>? RequestAttention;
     public event Action? AttentionCleared;
 
@@ -87,7 +87,7 @@ public partial class MainViewModel : ObservableObject
         _listPoll.Tick += (_, _) => LobbyList.Take(settings);
         GameStart = new GameStart(dialogs, windows, settings, pol, _launch, this,
             new GameStartLinks(SetPhase, BeginCancellable, EndCancellable, ResetProgress, OnProgress, () => OpenSettingsAt(SettingsTab.Handles),
-                               () => RequestHide?.Invoke(), () => RequestShow?.Invoke(), () => RequestExit?.Invoke()));
+                               () => RequestHide?.Invoke(), () => RequestShow?.Invoke(), why => RequestExit?.Invoke(why)));
         Multi = new MultiRunViewModel(dialogs, settings, credentials, pol, _ui, Accounts, Session, _launch,
             new MultiRunLinks(SetPhase, EnsureMemberAgreement, PromptHandleName, GameStart.BackUpGameSettingsAsync,
                               text => Notice.Show(text, "InformationOutline")));
@@ -106,7 +106,7 @@ public partial class MainViewModel : ObservableObject
         Repair = new RepairButtonViewModel(dialogs, windows, settings, pol, Session, () => News.WindowShown, RefreshInstallState);
         Lean = new LeanStartViewModel(dialogs, windows, settings, pol, _ui, Accounts, _launch, this,
             new LeanStartLinks(() => GameInstalled, SetPhase, OnProgress, ResetProgress, EndCancellable, GameStart.BackUpGameSettingsAsync, id => StartSocial(id),
-                               OnSnapshot, GameStart.PlayWithAsync, () => RequestShow?.Invoke(), () => RequestExit?.Invoke()));
+                               OnSnapshot, GameStart.PlayWithAsync, () => RequestShow?.Invoke(), why => RequestExit?.Invoke(why)));
         _pol.SnapshotUpdated += OnSnapshot;
         _pol.PidChanged += () => _ui.Post(() =>
         {
@@ -138,7 +138,7 @@ public partial class MainViewModel : ObservableObject
         Accounts.MessagesEnding = Social.StopKeeping;
 
         Multi.RequestShow += () => RequestShow?.Invoke();
-        Multi.RequestExit += () => RequestExit?.Invoke();
+        Multi.RequestExit += why => RequestExit?.Invoke(why);
         Social.MessageReceived += (from, text) => Alert(NoticeKind.Message, from, $"New message from {from}: {TextBits.Preview(text, 60)}");
         Social.FriendRequestReceived += (who, mid) =>
             Alert(NoticeKind.FriendRequest, null, $"{who} sent you a friend request. Open {FriendsWindowTitle} to answer it.", "AccountPlusOutline",
@@ -445,7 +445,7 @@ public partial class MainViewModel : ObservableObject
         _connectTask = done;
     }
 
-    internal void RaiseExit() => RequestExit?.Invoke();
+    internal void RaiseExit(string why) => RequestExit?.Invoke(why);
 
     public bool LoggingIn => _launchCts != null && _connectTask is { IsCompleted: false };
 
@@ -621,6 +621,8 @@ public partial class MainViewModel : ObservableObject
     public const string CommandLineTitle = "Provenance";
     public const string CommandLineNotInstalled = "FINAL FANTASY XI isn't installed yet. Open Provenance to install it.";
     public const string CommandLineSetupFirst = "Provenance needs setting up first. Open it and finish the setup, then try again.";
+
+    private const string CommandLineDidntGetIn = "the command-line login didn't get in";
 
     public CommandLineTarget? CommandLine { get; set; }
 
@@ -833,7 +835,7 @@ public partial class MainViewModel : ObservableObject
         }
         if (details is not var (pol, squareEnix, otp))
         {
-            if (commandLine is not null) RaiseExit();
+            if (commandLine is not null) RaiseExit(CommandLineDidntGetIn);
             return;
         }
         Log.Information("Login details read for account {Profile}", profile.Id);
@@ -897,7 +899,7 @@ public partial class MainViewModel : ObservableObject
         }
         if (commandLine is not null && !loggedIn)
         {
-            RaiseExit();
+            RaiseExit(CommandLineDidntGetIn);
             return;
         }
         if (startAfter && PlayCommand.CanExecute(null)) await PlayCommand.ExecuteAsync(null);

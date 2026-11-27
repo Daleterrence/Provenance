@@ -55,11 +55,43 @@ public sealed partial class PolSession : IDisposable
         {
             if (_pid == value) return;
             _pid = value;
+            if (value is { } pid) Watch(pid);
             PidChanged?.Invoke();
         }
     }
 
     public event Action? PidChanged;
+
+    private sealed class Watched(IDisposable? hookLog)
+    {
+        public IDisposable? HookLog { get; } = hookLog;
+        public DateTime? PlayedAt { get; set; }
+    }
+
+    private readonly Dictionary<int, Watched> _games = new();
+
+    private void Watch(int pid)
+    {
+        lock (_games)
+        {
+            if (_games.Remove(pid, out var before)) before.HookLog?.Dispose();
+            _games[pid] = new Watched(HookFiles.Dir is { } dir ? HookLogRelay.Follow(dir, pid, StillRunning(pid), TimeSpan.FromSeconds(2)) : null);
+        }
+    }
+
+    private static Func<bool> StillRunning(int pid) =>
+        ProcessStamp.Of(pid) is { } stamp ? stamp.MightBeRunning : () => ProcessStamp.PidRunning(pid);
+
+    private void LogGameEnd(int pid, int? code)
+    {
+        Watched? game;
+        lock (_games)
+            if (!_games.Remove(pid, out game)) return;
+        game.HookLog?.Dispose();
+        // Provenance can close with the game, before the follower's next look
+        if (HookFiles.Dir is { } dir) HookLogRelay.RelayNew(dir, pid);
+        GameExit.Log(pid, code, game.PlayedAt is { } at ? DateTime.UtcNow - at : null);
+    }
 
     public SessionRecords Records { get; }
 
@@ -536,6 +568,9 @@ public sealed partial class PolSession : IDisposable
         Credentials.SavePlay();
         if (Pid is { } playing) NudgeHold(playing);
         _played = true;
+        if (Pid is { } started)
+            lock (_games)
+                if (_games.TryGetValue(started, out var watched)) watched.PlayedAt = DateTime.UtcNow;
         _snapshots.Stop();
         if (Pid is not null) Records.MarkPlayed();
     }
@@ -593,6 +628,11 @@ public sealed partial class PolSession : IDisposable
 
     public void Dispose()
     {
+        lock (_games)
+        {
+            foreach (var game in _games.Values) game.HookLog?.Dispose();
+            _games.Clear();
+        }
         Prestarter.Close();
         CloseAhead();
         Credentials.StopSweeps();
@@ -632,10 +672,16 @@ public sealed partial class PolSession : IDisposable
             _played = false;
             Records.Forget();
             if (_polProc is { } game)
-                game.WaitForExitAsync().ContinueWith(_ => { game.Dispose(); ScreenSaverBack(); }, TaskScheduler.Default);
+                game.WaitForExitAsync().ContinueWith(_ => { LogLetGoEnd(game); game.Dispose(); ScreenSaverBack(); }, TaskScheduler.Default);
             _polProc = null;
             HookTracker.Forget();
         }
+    }
+
+    private void LogLetGoEnd(Process game)
+    {
+        try { LogGameEnd(game.Id, game.ExitCode); }
+        catch (Exception e) when (e is InvalidOperationException or Win32Exception) { }
     }
 
     public Task<string?> WaitForPlayAnswerAsync(TimeSpan timeout) => Task.Run(() =>
@@ -698,10 +744,17 @@ public sealed partial class PolSession : IDisposable
     public async Task<int?> WaitForExitAsync()
     {
         if (Pid is not { } pid) return null;
+        int? code = await ExitCodeAsync(pid).ConfigureAwait(false);
+        LogGameEnd(pid, code);
+        return code;
+    }
+
+    private async Task<int?> ExitCodeAsync(int pid)
+    {
         try
         {
             using var p = Process.GetProcessById(pid);
-            await p.WaitForExitAsync();
+            await p.WaitForExitAsync().ConfigureAwait(false);
             return p.ExitCode;
         }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }

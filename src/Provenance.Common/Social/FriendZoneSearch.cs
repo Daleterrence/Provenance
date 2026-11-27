@@ -17,6 +17,7 @@ public sealed class FriendZoneSearch
     private readonly Dictionary<(int World, uint Id), string> _names = new();
     private bool _troubled;
     private readonly HashSet<int> _failing = new();
+    private readonly Dictionary<(int World, int From), string> _logged = new();
     private int _generation;
 
     public FriendZoneSearch(Func<int, SearchEndpoint?> endpoints, TimeProvider? time = null)
@@ -123,6 +124,7 @@ public sealed class FriendZoneSearch
             _rule.Reset();
             _areas.Clear();
             _names.Clear();
+            _logged.Clear();
         }
     }
 
@@ -154,9 +156,12 @@ public sealed class FriendZoneSearch
                     }
                     got.UnionWith(chunk);
                     listed.UnionWith(answer.Entries.Select(e => e.Id));
-                    Log.Debug("Friend zones: {World} ({Address}) listed {Found} of {Asked}", world, at?.Host, answer.Entries.Count, chunk.Count);
-                    foreach (var e in answer.Entries)
-                        Log.Debug("Friend zones: {World} entry flags1 {Flags1:X4} flags2 {Flags2:X8} language {Language:X4}", world, e.Flags1, e.Flags2, e.Language);
+                    if (!LoggedAlready(batch.World, from, at, chunk.Count, answer.Entries))
+                    {
+                        Log.Debug("Friend zones: {World} ({Address}) listed {Found} of {Asked}", world, at?.Host, answer.Entries.Count, chunk.Count);
+                        foreach (var e in answer.Entries)
+                            Log.Debug("Friend zones: {World} entry flags1 {Flags1:X4} flags2 {Flags2:X8} language {Language:X4}", world, e.Flags1, e.Flags2, e.Language);
+                    }
                 }
                 else (answered, why) = (false, answer.Reason);
             }
@@ -168,6 +173,7 @@ public sealed class FriendZoneSearch
         }
         finally
         {
+            if (!answered) ForgetLogged(batch.World);
             var done = Finish(batch.World, answered, generation, got, [.. batch.Characters.Where(c => !listed.Contains(SearchServers.Id(c)))]);
             moved |= done.Moved;
             wait = done.Wait;
@@ -176,6 +182,23 @@ public sealed class FriendZoneSearch
         if (!moved) return;
         try { Changed?.Invoke(); }
         catch (Exception ex) { Log.Warning(ex, "Friend zones: a change handler threw"); }
+    }
+
+    private bool LoggedAlready(int world, int from, SearchEndpoint? at, int asked, IReadOnlyList<SearchEntry> entries)
+    {
+        string answer = $"{at?.Host} {asked} " + string.Join(' ', entries.Select(e => $"{e.Flags1:X4}{e.Flags2:X8}{e.Language:X4}"));
+        lock (_gate)
+        {
+            if (_logged.GetValueOrDefault((world, from)) == answer) return true;
+            _logged[(world, from)] = answer;
+            return false;
+        }
+    }
+
+    private void ForgetLogged(int world)
+    {
+        lock (_gate)
+            foreach (var key in _logged.Keys.Where(k => k.World == world).ToList()) _logged.Remove(key);
     }
 
     private (bool Moved, TimeSpan Wait) Finish(int world, bool answered, int generation, HashSet<uint> got, List<CharacterId> unlisted)

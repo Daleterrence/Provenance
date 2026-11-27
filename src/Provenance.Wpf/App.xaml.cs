@@ -57,6 +57,7 @@ public partial class App : Application
 
         if (ReusesTrayCopy(args) && TrayCopy.ReuseRunning())
         {
+            AppClosing.Because("a copy in the tray came back in its place");
             Shutdown(0);
             return;
         }
@@ -111,6 +112,7 @@ public partial class App : Application
         }
         else StartPolEarly(() => ScreenSaver.Note(settings), pol.Records.EndOrphans, () => { });
         var mainVm = ShowMainWindow(credentials, settings, pol, noAutoLogin, commandLine);
+        CatchUpHookLogs();
         _ = SelfUpdate.TellIfUpdateWaiting(mainVm.UpdateNotice);
         SelfUpdate.TellIfHeldBack(args, mainVm.Notice);
         StartMainViewModel(mainVm, noAutoLogin);
@@ -184,6 +186,7 @@ public partial class App : Application
                              ?? VersionTag.OwnText() ?? "dev";
             Log.Information("{Line:l}", StartupLine.For(version, Environment.OSVersion.Version,
                 settings.Current.ThirdPartyHookPlatform, settings.DetectedRegion));
+            foreach (var line in StartupLine.Details(settings.Current, settings.DetectedRegion)) Log.Information("{Line:l}", line);
         }
         catch (Exception ex) { Log.Warning(ex, "Couldn't log what Provenance is running on"); }
     }
@@ -193,6 +196,16 @@ public partial class App : Application
         int swept = HookFiles.Sweep(HookFiles.RequiredDir, ProcessStamp.PidRunning, TimeSpan.FromDays(7), DateTime.UtcNow);
         if (swept > 0) Log.Information("Removed {Count} old hook file(s)", swept);
     }
+
+    private static void CatchUpHookLogs() => Task.Run(() =>
+    {
+        try
+        {
+            int copied = HookLogRelay.CatchUp(HookFiles.RequiredDir, HookLogRelay.StillWriting);
+            if (copied > 0) Log.Information("Copied {Count} hook line(s) from games that ended with no copy of Provenance watching", copied);
+        }
+        catch (Exception ex) { Log.Warning(ex, "Couldn't copy the hook lines of games that ended earlier"); }
+    });
 
     private static void WarmKeys()
     {
@@ -257,7 +270,8 @@ public partial class App : Application
         OpenMainWindow(mainWindow, mainVm, noAutoLogin);
         timer.Lap("shown");
         if (settings.Current.MinimizeToTray) TrayIcon.Warm();
-        if (SelfUpdate.InstalledCopy) CloseRequest.Listen(() => Dispatcher.InvokeAsync(mainWindow.ExitWithoutAsking));
+        if (SelfUpdate.InstalledCopy)
+            CloseRequest.Listen(() => Dispatcher.InvokeAsync(() => mainWindow.ExitBecause("asked to close for an update or an uninstall")));
         return mainVm;
     }
 
@@ -277,7 +291,7 @@ public partial class App : Application
         Log.Information("Windows session ending");
         _ = mainVm.CancelLogInAsync();
         bool refuse = mainWindow.ExitWaitsForAnswer;
-        mainWindow.ExitWithoutAsking();
+        mainWindow.ExitBecause("Windows is logging off or shutting down");
         return refuse;
     }
 

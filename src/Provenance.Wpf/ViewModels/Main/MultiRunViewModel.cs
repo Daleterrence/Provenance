@@ -37,7 +37,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
     private readonly MultiRunLinks _links;
 
     public event Action? RequestShow;
-    public event Action? RequestExit;
+    public event Action<string>? RequestExit;
 
     public const string AllInGameText = "Every account enabled for Multi-account login is already in the game. Nothing was started.";
 
@@ -177,7 +177,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
         var failures = result?.Failures ?? [];
         Log.Information("Multi-account mode: finished, {Started} started, {Already} already in the game, {Failures} failure(s), stopped {Stopped}",
                         result?.Started, result?.AlreadyInGame, failures.Count, result?.Stopped);
-        if (_exitAfterStop) { RequestExit?.Invoke(); return; }
+        if (_exitAfterStop) { RequestExit?.Invoke("the multi-account run was stopped by closing Provenance"); return; }
         if (failures.Count > 0 || unexpected != null || _lateGameFailures.Count > 0)
         {
             var lines = failures.Select(f => $"{f.Account.Name}: {f.Failure.Text}").Concat(_lateGameFailures).ToList();
@@ -187,7 +187,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
             _dialogs.Error("Multi-account mode", string.Join("\n", lines), offerLogs: true);
             return;
         }
-        if (result is { CloseApp: true }) RequestExit?.Invoke();
+        if (result is { CloseApp: true }) RequestExit?.Invoke("the multi-account run finished and Close Provenance when finished is on");
         else if (result is { Started: 0, AlreadyInGame: > 0, Stopped: false })
         {
             if (atOpen) _links.Notice(AllInGameText);
@@ -222,7 +222,7 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
 
     internal void HoldRun(CancellationTokenSource cts) => _cts = cts;
     internal bool ExitsAfterStop => _exitAfterStop;
-    internal void RaiseExit() => RequestExit?.Invoke();
+    internal void RaiseExit(string why) => RequestExit?.Invoke(why);
 
     internal bool ConfirmStopAccounts() => _dialogs.Confirm("Multi-account mode",
         "Your accounts are still starting. Stop them and close Provenance?", "STOP AND CLOSE", ConfirmStyle.Destructive);
