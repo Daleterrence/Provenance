@@ -89,7 +89,8 @@ public partial class MainViewModel : ObservableObject
             new GameStartLinks(SetPhase, BeginCancellable, EndCancellable, ResetProgress, OnProgress, () => OpenSettingsAt(SettingsTab.Handles),
                                () => RequestHide?.Invoke(), () => RequestShow?.Invoke(), () => RequestExit?.Invoke()));
         Multi = new MultiRunViewModel(dialogs, settings, credentials, pol, _ui, Accounts, Session, _launch,
-            new MultiRunLinks(SetPhase, EnsureMemberAgreement, PromptHandleName, GameStart.BackUpGameSettingsAsync));
+            new MultiRunLinks(SetPhase, EnsureMemberAgreement, PromptHandleName, GameStart.BackUpGameSettingsAsync,
+                              text => Notice.Show(text, "InformationOutline")));
         Multi.UpdateBusy = () => UpdatingNow;
         _refused = refused ?? new RefusedPasswords(settings);
         _accountCheck = Accounts.Check = new AccountCheck(dialogs, pol, _launch, _refused,
@@ -649,7 +650,7 @@ public partial class MainViewModel : ObservableObject
             _launch.DropAhead();
             if (!GameInstalled) return;
             Log.Information("Starting all accounts automatically");
-            Multi.StartAllAccountsCommand.Execute(null);
+            Multi.StartAtOpen();
             return;
         }
         if (!LogsInAtStart(autoLoginSuppressed))

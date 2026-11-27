@@ -21,7 +21,8 @@ internal sealed record MultiRunLinks(
     Action<SessionPhase> SetPhase,
     Func<bool> EnsureMemberAgreement,
     Func<string?> PromptHandleName,
-    Func<string?, Action<string>?, Task> BackUpGameSettings);
+    Func<string?, Action<string>?, Task> BackUpGameSettings,
+    Action<string> Notice);
 
 public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
 {
@@ -37,6 +38,8 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
 
     public event Action? RequestShow;
     public event Action? RequestExit;
+
+    public const string AllInGameText = "Every account enabled for Multi-account login is already in the game. Nothing was started.";
 
     internal MultiRunViewModel(IDialogs dialogs, ISettingsService settings, ICredentialService credentials,
                                PolSession pol, UiThread ui, AccountsViewModel accounts, SessionState session, GameLaunch launch, MultiRunLinks links)
@@ -106,9 +109,19 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
 
     internal Func<bool> UpdateBusy { get; set; } = () => false;
 
+    private bool _atOpen;
+
+    internal void StartAtOpen()
+    {
+        _atOpen = true;
+        StartAllAccountsCommand.Execute(null);
+    }
+
     [RelayCommand(CanExecute = nameof(CanStartOrStop), AllowConcurrentExecutions = true)]
     private async Task StartAllAccountsAsync()
     {
+        bool atOpen = _atOpen;
+        _atOpen = false;
         if (Running) { StopAllAccounts(); return; }
         if (UpdateBusy()) return;
         if (_session.Launching || _session.LoggedIn || _pol.Pid is not null) return;
@@ -175,6 +188,11 @@ public partial class MultiRunViewModel : ObservableObject, IMultiRunHost
             return;
         }
         if (result is { CloseApp: true }) RequestExit?.Invoke();
+        else if (result is { Started: 0, AlreadyInGame: > 0, Stopped: false })
+        {
+            if (atOpen) _links.Notice(AllInGameText);
+            else _dialogs.Info("Multi-account mode", AllInGameText);
+        }
     }
 
     private void ApplyFailure(MultiRunAccount account, AccountFailure failure)
