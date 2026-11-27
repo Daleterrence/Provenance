@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <VersionPrefix>1.0.0</VersionPrefix>
-    <VersionSuffix>pb.2.2</VersionSuffix>
+    <VersionSuffix>pb.2.3</VersionSuffix>
   </PropertyGroup>
 
   <!-- polcore.dll and FFXi.dll are 32-bit in-process COM servers, a 64-bit host only gets a flaky DCOM surrogate -->
