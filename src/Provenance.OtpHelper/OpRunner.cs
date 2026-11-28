@@ -17,7 +17,7 @@ internal static class OpRunner
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
-        start.Environment["OP_BIOMETRIC_UNLOCK_ENABLED"] = "true";
+        start.Environment[OpCommand.AppUnlock] = "true";
         foreach (var argument in request.OpArguments()) start.ArgumentList.Add(argument);
         try
         {

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Provenance.OtpHelper;
 using Serilog;
 
 namespace Provenance.Common.Otp;
@@ -9,7 +10,7 @@ public sealed record OnePasswordAccount(string Id, string Url, string Email);
 public static class OnePassword
 {
     private const string SettingsLink = "onepassword://settings/developers";
-    private static readonly Dictionary<string, string> Env = new() { ["OP_BIOMETRIC_UNLOCK_ENABLED"] = "true" };
+    private static readonly Dictionary<string, string> Env = new() { [OpCommand.AppUnlock] = "true" };
 
     public const string WaitText = "Getting the code from 1Password. Confirm with Windows Hello when it asks.";
     public const string OpenSettingsFailedText = "Windows didn't open 1Password.";
@@ -76,7 +77,7 @@ public static class OnePassword
                 if (a.ValueKind != JsonValueKind.Object) continue;
                 string Text(string name) => a.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
                 var id = Text("account_uuid");
-                if (OpRequest.IsAccountId(id) && list.All(x => x.Id != id)) list.Add(new OnePasswordAccount(id, Text("url"), Text("email")));
+                if (OpCommand.IsAccountId(id) && list.All(x => x.Id != id)) list.Add(new OnePasswordAccount(id, Text("url"), Text("email")));
             }
             return list;
         }
