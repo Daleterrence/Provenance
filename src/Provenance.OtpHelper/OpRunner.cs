@@ -17,6 +17,9 @@ internal static class OpRunner
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        // the user's own OP_ settings can send op to a service account or Connect and never the 1Password app
+        foreach (var name in start.Environment.Keys.Where(k => k.StartsWith("OP_", StringComparison.OrdinalIgnoreCase)).ToList())
+            start.Environment.Remove(name);
         start.Environment[OpCommand.AppUnlock] = "true";
         foreach (var argument in request.OpArguments()) start.ArgumentList.Add(argument);
         try
