@@ -16,7 +16,7 @@ internal sealed record Request(string PipeName, string OpPath, TimeSpan Limit, s
         if (!Path.IsPathFullyQualified(args[1]) || !Path.GetFileName(args[1]).Equals("op.exe", StringComparison.OrdinalIgnoreCase)) return null;
         if (!int.TryParse(args[2], NumberStyles.None, CultureInfo.InvariantCulture, out var seconds) || seconds is < 1 or > 300) return null;
         var mode = args[3];
-        if (mode != OtpMode && mode != AccountsMode) return null;
+        if (mode is not (OtpMode or AccountsMode)) return null;
         if (mode == OtpMode && (args[4].Length == 0 || args[4].TrimStart().StartsWith('-'))) return null;
         return new Request(args[0], args[1], TimeSpan.FromSeconds(seconds), mode, args[4], args[5]);
     }
