@@ -70,7 +70,7 @@
 
   <Target Name="CopyOtpHelper" AfterTargets="Build" Condition="'$(_IsPublishing)' != 'true'">
     <ItemGroup>
-      <OtpHelperFile Include="..\Provenance.OtpHelper\bin\$(Configuration)\$(TargetFramework)\$(RuntimeIdentifier)\ProvenanceOp.*" Exclude="**\*.pdb" />
+      <OtpHelperFile Include="..\Provenance.OtpHelper\bin\$(Configuration)\$(TargetFramework)\$(RuntimeIdentifier)\Provenance 1Password Helper.*" Exclude="**\*.pdb" />
     </ItemGroup>
     <Copy SourceFiles="@(OtpHelperFile)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>

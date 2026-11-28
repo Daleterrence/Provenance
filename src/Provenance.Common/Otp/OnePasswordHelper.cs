@@ -13,7 +13,7 @@ namespace Provenance.Common.Otp;
 
 internal static class OnePasswordHelper
 {
-    internal const string FileName = "ProvenanceOp.exe";
+    internal const string FileName = "Provenance 1Password Helper.exe";
 
     private const int MaxReplyBytes = 262_144;
     private static readonly TimeSpan Slack = TimeSpan.FromSeconds(10), Grace = TimeSpan.FromMilliseconds(500);

@@ -70,7 +70,7 @@ try {
     & (Get-Process -Id $PID).Path -NoProfile -File $buildNative -OutDir $native
     if ($LASTEXITCODE -ne 0) { throw "build-native.ps1 failed (exit code $LASTEXITCODE)" }
 
-    # launcher first: both bring the .NET runtime and Velopack.dll, and Provenance's copies should be the ones that stay
+    # Provenance last: the others bring the .NET runtime too (the launcher Velopack.dll as well), and Provenance's copies should be the ones that stay
     foreach ($project in $launcher, $otpHelper, $wpf) {
         $props = @("-p:Version=$Version")
         if ($project -eq $wpf) { $props += "-p:NativeToolsDir=$native" }
@@ -79,7 +79,7 @@ try {
     }
 
     $numeric = "$($Version.Split('-')[0]).0"
-    foreach ($file in @('Provenance.exe', 'ProvenanceLauncher.exe', 'ProvenanceOp.exe') + @($natives -like '*.exe' | ForEach-Object { "native\$_" })) {
+    foreach ($file in @('Provenance.exe', 'ProvenanceLauncher.exe', 'Provenance 1Password Helper.exe') + @($natives -like '*.exe' | ForEach-Object { "native\$_" })) {
         if (-not (Test-Path -LiteralPath (Join-Path $publish $file))) { throw "The publish folder has no $file" }
         $info = (Get-Item -LiteralPath (Join-Path $publish $file)).VersionInfo
         if ($info.FileVersion -ne $numeric) { throw "$file is version $($info.FileVersion), expected $numeric" }

@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <RootNamespace>Provenance.OtpHelper</RootNamespace>
-    <AssemblyName>ProvenanceOp</AssemblyName>
+    <AssemblyName>Provenance 1Password Helper</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>$(ProvenanceAssetsDir)\app\provenance.ico</ApplicationIcon>
     <Product>Provenance</Product>
