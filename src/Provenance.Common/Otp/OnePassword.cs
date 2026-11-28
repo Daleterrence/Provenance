@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Serilog;
 
 namespace Provenance.Common.Otp;
@@ -10,7 +9,6 @@ public sealed record OnePasswordAccount(string Id, string Url, string Email);
 public static class OnePassword
 {
     private const string SettingsLink = "onepassword://settings/developers";
-    private static readonly Regex AccountId = new(@"^[A-Za-z0-9]{1,64}$");
     private static readonly Dictionary<string, string> Env = new() { ["OP_BIOMETRIC_UNLOCK_ENABLED"] = "true" };
 
     public const string WaitText = "Getting the code from 1Password. Confirm with Windows Hello when it asks.";
@@ -23,9 +21,7 @@ public static class OnePassword
         if (found.Path is not { } op) return OtpSources.ToolProblem(ToolFacts.OnePassword, found);
         try
         {
-            List<string> args = ["item", "get", item, "--otp"];
-            if (AccountId.IsMatch(account)) args.AddRange(["--account", account]);
-            var r = await ToolProcess.RunAsync(op, args, Env, TimeSpan.FromSeconds(90), ct);
+            var r = await OnePasswordHelper.RunAsync(op, OpRequest.Otp(item, account), Env, TimeSpan.FromSeconds(90), ct);
             return OtpSources.CodeFrom(r, err => ProblemFor(err, item));
         }
         finally { ToolInstaller.UpdateInBackground(ToolFacts.OnePassword); }
@@ -51,7 +47,7 @@ public static class OnePassword
     {
         try
         {
-            var r = await ToolProcess.RunAsync(op, ["account", "list", "--format", "json"], Env, TimeSpan.FromSeconds(20), ct);
+            var r = await OnePasswordHelper.RunAsync(op, OpRequest.Accounts, Env, TimeSpan.FromSeconds(20), ct);
             if (r.Exit != 0)
             {
                 Log.Information("Listing 1Password's accounts: exit {Exit}", r.Exit);
@@ -80,7 +76,7 @@ public static class OnePassword
                 if (a.ValueKind != JsonValueKind.Object) continue;
                 string Text(string name) => a.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
                 var id = Text("account_uuid");
-                if (AccountId.IsMatch(id) && list.All(x => x.Id != id)) list.Add(new OnePasswordAccount(id, Text("url"), Text("email")));
+                if (OpRequest.IsAccountId(id) && list.All(x => x.Id != id)) list.Add(new OnePasswordAccount(id, Text("url"), Text("email")));
             }
             return list;
         }

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>Provenance.OtpHelper</RootNamespace>
+    <AssemblyName>ProvenanceOp</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>$(ProvenanceAssetsDir)\app\provenance.ico</ApplicationIcon>
+    <Product>Provenance</Product>
+  </PropertyGroup>
+
+</Project>

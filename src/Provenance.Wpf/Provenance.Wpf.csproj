@@ -52,6 +52,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Provenance.OtpHelper\Provenance.OtpHelper.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="provenance-wpf-tests" />
     <InternalsVisibleTo Include="provenance-screens" />
   </ItemGroup>
@@ -63,6 +67,13 @@
     <NativeFile Include="$(NativeToolsDir)\Provenance - FINAL FANTASY XI Uninstall.exe" />
     <None Include="@(NativeFile)" Link="native\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <Target Name="CopyOtpHelper" AfterTargets="Build" Condition="'$(_IsPublishing)' != 'true'">
+    <ItemGroup>
+      <OtpHelperFile Include="..\Provenance.OtpHelper\bin\$(Configuration)\$(TargetFramework)\$(RuntimeIdentifier)\ProvenanceOp.*" Exclude="**\*.pdb" />
+    </ItemGroup>
+    <Copy SourceFiles="@(OtpHelperFile)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
 
   <Target Name="RequireAssets" BeforeTargets="BeforeBuild">
     <Error Condition="'$(ProvenanceAssetsDir)' == '' or !Exists('$(ProvenanceAssetsDir)\app\provenance.ico')"
