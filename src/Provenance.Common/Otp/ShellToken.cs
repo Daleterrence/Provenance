@@ -26,12 +26,15 @@ internal sealed class ShellToken : IDisposable
     internal static ShellToken Open()
     {
         using var me = Process.GetCurrentProcess();
-        foreach (var candidate in Process.GetProcessesByName("explorer"))
+        var candidates = Process.GetProcessesByName("explorer");
+        try
         {
-            using (candidate)
-            {
+            foreach (var candidate in candidates)
                 if (candidate.SessionId == me.SessionId && TryOpen(candidate.Id) is { } shell) return shell;
-            }
+        }
+        finally
+        {
+            foreach (var candidate in candidates) candidate.Dispose();
         }
         throw new InvalidOperationException("There is no explorer.exe in this session to take the user's token from.");
     }
