@@ -24,6 +24,7 @@ $repo = Split-Path -Parent $PSScriptRoot
 $src = Join-Path $repo 'src'
 $wpf = Join-Path $src 'Provenance.Wpf\Provenance.Wpf.csproj'
 $launcher = Join-Path $src 'Provenance.Launcher\Provenance.Launcher.csproj'
+$otpHelper = Join-Path $src 'Provenance.OtpHelper\Provenance.OtpHelper.csproj'
 $assetsRoot = Find-ProvenanceAssets
 $icon = Join-Path $assetsRoot 'app\provenance.ico'
 $buildNative = Join-Path $repo 'native\build-native.ps1'
@@ -70,7 +71,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "build-native.ps1 failed (exit code $LASTEXITCODE)" }
 
     # launcher first: both bring the .NET runtime and Velopack.dll, and Provenance's copies should be the ones that stay
-    foreach ($project in $launcher, $wpf) {
+    foreach ($project in $launcher, $otpHelper, $wpf) {
         $props = @("-p:Version=$Version")
         if ($project -eq $wpf) { $props += "-p:NativeToolsDir=$native" }
         & dotnet publish $project -c Release -r win-x86 --self-contained true @props -o $publish --nologo
@@ -78,7 +79,7 @@ try {
     }
 
     $numeric = "$($Version.Split('-')[0]).0"
-    foreach ($file in @('Provenance.exe', 'ProvenanceLauncher.exe') + @($natives -like '*.exe' | ForEach-Object { "native\$_" })) {
+    foreach ($file in @('Provenance.exe', 'ProvenanceLauncher.exe', 'ProvenanceOp.exe') + @($natives -like '*.exe' | ForEach-Object { "native\$_" })) {
         if (-not (Test-Path -LiteralPath (Join-Path $publish $file))) { throw "The publish folder has no $file" }
         $info = (Get-Item -LiteralPath (Join-Path $publish $file)).VersionInfo
         if ($info.FileVersion -ne $numeric) { throw "$file is version $($info.FileVersion), expected $numeric" }

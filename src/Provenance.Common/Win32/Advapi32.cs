@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Win32.SafeHandles;
 
 namespace Provenance.Common.Win32;
@@ -7,6 +8,11 @@ internal static class Advapi32
 {
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     internal static extern bool ConvertStringSecurityDescriptorToSecurityDescriptorW(string sddl, int revision, out IntPtr descriptor, IntPtr size);
+
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    internal static extern bool CreateProcessWithTokenW(SafeAccessTokenHandle token, uint logonFlags, string? application, StringBuilder commandLine,
+                                                        uint flags, IntPtr environment, string? directory, ref StartupInfo startup,
+                                                        out ProcessInformation information);
 
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     internal static extern bool CredDeleteW(string target, uint type, uint reservedFlag);
@@ -22,6 +28,10 @@ internal static class Advapi32
 
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     internal static extern bool CredWriteW([In] ref CREDENTIAL credential, uint flags);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    internal static extern bool DuplicateTokenEx(SafeAccessTokenHandle token, uint access, IntPtr attributes, int impersonationLevel, int tokenType,
+                                                 out SafeAccessTokenHandle duplicate);
 
     [DllImport("advapi32.dll", SetLastError = true)]
     internal static extern bool GetKernelObjectSecurity(SafeFileHandle handle, uint info, byte[]? sd, uint length, out uint needed);

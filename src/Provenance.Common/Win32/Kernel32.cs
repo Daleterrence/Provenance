@@ -54,6 +54,9 @@ internal static class Kernel32
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     internal static extern uint GetLongPathNameW(string shortPath, StringBuilder longPath, uint size);
 
+    [DllImport("kernel32.dll", SetLastError = true)]
+    internal static extern bool GetNamedPipeClientProcessId(SafePipeHandle pipe, out uint processId);
+
     [DllImport("kernel32.dll", CharSet = CharSet.Ansi, BestFitMapping = false, ThrowOnUnmappableChar = true)]
     internal static extern int GetPrivateProfileSectionA(string section, byte[] buffer, int size, string path);
 
@@ -153,6 +156,25 @@ internal struct FindData
     public uint ReparseTag, Reserved;
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string Name;
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)] public string ShortName;
+}
+
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+internal struct StartupInfo
+{
+    public int Size;
+    public string? Reserved;
+    public string? Desktop;
+    public string? Title;
+    public int X, Y, XSize, YSize, XCountChars, YCountChars, FillAttribute, Flags;
+    public short ShowWindow, ReservedSize;
+    public IntPtr ReservedData, StandardInput, StandardOutput, StandardError;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct ProcessInformation
+{
+    public IntPtr Process, Thread;
+    public int ProcessId, ThreadId;
 }
 
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
